@@ -1,0 +1,12 @@
+safety:
+  allowed_cidrs:
+    - "127.0.0.0/8"
+    - "::1/128"
+    - "10.0.0.0/8"
+    - "172.16.0.0/12"
+    - "192.168.0.0/16"
+  block_public_ip: true
+
+scanner:
+  max_concurrency: 5
+  enable_nuclei: false

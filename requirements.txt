@@ -1,0 +1,10 @@
+pydantic
+PyYAML
+aiohttp
+requests
+jinja2
+rich
+pytest
+packaging
+pytest-asyncio
+python-dotenv

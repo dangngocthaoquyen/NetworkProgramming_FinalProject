@@ -1,0 +1,47 @@
+{
+  "records": [
+    {
+      "cve_id": "CVE-2021-41773",
+      "product": "Apache httpd",
+      "match_type": "exact",
+      "version": "2.4.49",
+      "cvss": 7.5,
+      "title": "Apache HTTP Server path traversal",
+      "remediation": "Upgrade Apache HTTP Server to a supported patched release."
+    },
+    {
+      "cve_id": "CVE-2016-0777",
+      "product": "OpenSSH",
+      "match_type": "exact",
+      "version": "7.2",
+      "cvss": 7.5,
+      "title": "OpenSSH roaming information exposure",
+      "remediation": "Upgrade OpenSSH and disable roaming on affected clients."
+    },
+    {
+      "cve_id": "CVE-2099-0001",
+      "product": "nginx",
+      "match_type": "range",
+      "version_range": "<1.20.0",
+      "cvss": 8.1,
+      "title": "Mock nginx old-version finding",
+      "remediation": "Upgrade nginx to a supported release after compatibility testing."
+    },
+    {
+      "cve_id": "CVE-2099-0002",
+      "product": "Legacy Web Server",
+      "match_type": "product",
+      "cvss": 7.2,
+      "title": "Mock product-level CVE candidate",
+      "remediation": "Confirm the exact version and apply the vendor security update."
+    },
+    {
+      "cve_id": "CVE-2099-0003",
+      "product": "nginx",
+      "match_type": "product",
+      "cvss": 5.0,
+      "title": "Mock low-severity nginx finding",
+      "remediation": "Review vendor guidance during routine maintenance."
+    }
+  ]
+}

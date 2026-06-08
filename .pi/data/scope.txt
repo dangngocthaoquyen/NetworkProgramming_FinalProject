@@ -1,0 +1,14 @@
+AUTHORIZED PHASE 3 SCAN SCOPE
+
+Allowed:
+- localhost
+- 127.0.0.1
+- Private CIDRs configured in config.yaml
+- Explicitly authorized lab networks only
+
+Blocked:
+- Public Internet targets
+- Targets outside configured allowed_cidrs
+- Automatically discovered targets that are not already authorized
+
+No exploit, brute force, DoS, stress testing, or intrusive scanning is allowed.

@@ -1,0 +1,45 @@
+{
+  "scan_id": "COURSE-LAB-001",
+  "summary": {
+    "total": 2,
+    "critical": 0,
+    "high": 1,
+    "medium": 1,
+    "low": 0,
+    "info": 0
+  },
+  "findings": [
+    {
+      "finding_id": "CVE-2021-41773",
+      "cve_id": "CVE-2021-41773",
+      "title": "CVE-2021-41773: Apache HTTP Server path traversal",
+      "host": "192.168.56.10",
+      "port": 8080,
+      "source_agents": [
+        "cve_lookup_agent"
+      ],
+      "severity": "high",
+      "cvss": 7.5,
+      "confidence": 0.95,
+      "evidence": "Offline mock DB matched Apache httpd 2.4.49 on 192.168.56.10:8080/tcp using exact match.",
+      "remediation": "Upgrade Apache HTTP Server to a supported patched release.",
+      "risk_score": 71.25
+    },
+    {
+      "finding_id": "CVE-2099-0001",
+      "cve_id": "CVE-2099-0001",
+      "title": "CVE-2099-0001: Mock nginx old-version finding",
+      "host": "192.168.56.10",
+      "port": 80,
+      "source_agents": [
+        "cve_lookup_agent"
+      ],
+      "severity": "medium",
+      "cvss": 8.1,
+      "confidence": 0.8,
+      "evidence": "Offline mock DB matched nginx 1.18.0 on 192.168.56.10:80/tcp using range match.",
+      "remediation": "Upgrade nginx to a supported release after compatibility testing.",
+      "risk_score": 64.8
+    }
+  ]
+}

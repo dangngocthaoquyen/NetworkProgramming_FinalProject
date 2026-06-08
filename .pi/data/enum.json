@@ -1,0 +1,34 @@
+{
+  "scan_id": "COURSE-LAB-001",
+  "target": "authorized-lab",
+  "hosts": [
+    {
+      "ip": "192.168.56.10",
+      "ports": [
+        {
+          "port": 22,
+          "protocol": "tcp",
+          "service": "ssh",
+          "product": "OpenSSH",
+          "version": "8.9p1"
+        },
+        {
+          "port": 80,
+          "protocol": "tcp",
+          "service": "http",
+          "product": "nginx",
+          "version": "1.18.0",
+          "url": "http://192.168.56.10/"
+        },
+        {
+          "port": 8080,
+          "protocol": "tcp",
+          "service": "http",
+          "product": "Apache httpd",
+          "version": "2.4.49",
+          "url": "http://192.168.56.10:8080/"
+        }
+      ]
+    }
+  ]
+}

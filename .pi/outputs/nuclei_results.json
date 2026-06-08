@@ -1,0 +1,8 @@
+{
+  "agent_name": "nuclei_agent",
+  "scan_id": "COURSE-LAB-001",
+  "status": "skipped",
+  "message": "Nuclei is disabled in config.yaml.",
+  "data": {},
+  "errors": []
+}
