@@ -1,9 +1,10 @@
 {
-  "scan_id": "COURSE-LAB-001",
-  "target": "authorized-lab",
+  "scan_id": "COURSE-LAB-LINUX-OS",
+  "target": "authorized-linux-lab",
   "hosts": [
     {
-      "ip": "192.168.56.10",
+      "ip": "192.168.56.21",
+      "hostname": "linux-lab",
       "os": {
         "name": "Ubuntu",
         "version": "22.04",
@@ -19,7 +20,11 @@
           "protocol": "tcp",
           "service": "ssh",
           "product": "OpenSSH",
-          "version": "8.9p1"
+          "version": "8.9p1",
+          "state": "open",
+          "source": "nmap-service-detection",
+          "confidence": 96,
+          "banner": "SSH-2.0-OpenSSH_8.9p1"
         },
         {
           "port": 80,
@@ -27,7 +32,11 @@
           "service": "http",
           "product": "nginx",
           "version": "1.18.0",
-          "url": "http://192.168.56.10/"
+          "url": "http://192.168.56.21/",
+          "state": "open",
+          "source": "http-probe",
+          "confidence": 94,
+          "banner": "Server: nginx/1.18.0"
         },
         {
           "port": 8080,
@@ -35,22 +44,13 @@
           "service": "http",
           "product": "Apache httpd",
           "version": "2.4.49",
-          "url": "http://192.168.56.10:8080/"
+          "url": "http://192.168.56.21:8080/",
+          "state": "open",
+          "source": "http-probe",
+          "confidence": 95,
+          "banner": "Server: Apache/2.4.49"
         }
       ]
-    },
-    {
-      "ip": "192.168.56.11",
-      "os": {
-        "name": "Windows 10",
-        "version": "22H2",
-        "build": "19045",
-        "architecture": "x86_64",
-        "patch_level": "lab-baseline",
-        "confidence": 88,
-        "source": "phase2-os-fingerprint"
-      },
-      "ports": []
     }
   ]
 }

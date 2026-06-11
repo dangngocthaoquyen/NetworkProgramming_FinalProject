@@ -106,7 +106,5 @@ class ScopeGuard:
 
         for host in validated.hosts:
             self.validate_ip(host.ip)
-            if host.hostname:
-                self.validate_hostname(host.hostname)
 
         return validated

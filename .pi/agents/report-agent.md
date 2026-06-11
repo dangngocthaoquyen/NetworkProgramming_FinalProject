@@ -14,7 +14,8 @@ without changing scan scope or initiating scanner activity.
 ## Output
 
 - `report.md` containing Executive Summary, Scope, Findings by Severity,
-  Technical Details, Remediation, and Appendix.
+  OS Inventory, Enumeration Inventory, Technical Details, Remediation, and
+  Appendix.
 
 ## Allowed Tools
 

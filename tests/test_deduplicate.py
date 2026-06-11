@@ -1,5 +1,5 @@
 from app.merge.deduplicate import deduplicate_findings
-from app.schemas.vuln_schema import Finding, Severity
+from app.schemas.vuln_schema import Finding, Severity, SourceType
 
 
 def make_finding(source: str, evidence: str, confidence: float) -> Finding:
@@ -41,3 +41,12 @@ def test_deduplicate_keeps_different_ports_separate():
     )
 
     assert len(deduplicate_findings([first, second])) == 2
+
+
+def test_deduplicate_keeps_different_source_types_separate():
+    service = make_finding("cve_lookup_agent", "Service evidence.", 0.8)
+    operating_system = service.model_copy(
+        update={"port": None, "source_type": SourceType.OS, "evidence": "OS evidence."}
+    )
+
+    assert len(deduplicate_findings([service, operating_system])) == 2

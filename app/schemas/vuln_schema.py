@@ -21,6 +21,14 @@ class Severity(StrEnum):
     CRITICAL = "critical"
 
 
+class SourceType(StrEnum):
+    """Origin category of a normalized vulnerability finding."""
+
+    SERVICE = "service"
+    OS = "os"
+    WEB_TEMPLATE = "web-template"
+
+
 class Finding(VulnBaseModel):
     """A single normalized vulnerability finding."""
 
@@ -30,6 +38,7 @@ class Finding(VulnBaseModel):
     host: str | None = None
     port: int | None = Field(default=None, ge=1, le=65535)
     source_agents: list[str] = Field(default_factory=list)
+    source_type: SourceType = SourceType.SERVICE
     severity: Severity
     cvss: float | None = Field(default=None, ge=0, le=10)
     confidence: float = Field(ge=0, le=1)

@@ -42,6 +42,27 @@
       "cvss": 5.0,
       "title": "Mock low-severity nginx finding",
       "remediation": "Review vendor guidance during routine maintenance."
+    },
+    {
+      "cve_id": "CVE-2099-1001",
+      "source_type": "os",
+      "os_name": "Ubuntu",
+      "os_version": "22.04",
+      "kernel": "5.15.0",
+      "match_type": "exact",
+      "cvss": 8.4,
+      "title": "Mock Ubuntu kernel vulnerability candidate",
+      "remediation": "Review Ubuntu security notices and apply the approved kernel update."
+    },
+    {
+      "cve_id": "CVE-2099-1002",
+      "source_type": "os",
+      "os_name": "Windows 10",
+      "build": "19045",
+      "match_type": "exact",
+      "cvss": 7.8,
+      "title": "Mock Windows 10 build vulnerability candidate",
+      "remediation": "Review Microsoft security guidance and apply approved cumulative updates."
     }
   ]
 }

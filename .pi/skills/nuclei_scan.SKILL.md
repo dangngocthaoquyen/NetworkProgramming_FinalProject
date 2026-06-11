@@ -1,3 +1,9 @@
+---
+name: nuclei-scan
+description: Guides safe authorized vulnerability checks using Nuclei-style templates or simulated scan results. Use only for in-scope lab targets.
+---
+
+
 # Safe Nuclei Scan Skill
 
 ## Role
@@ -8,6 +14,7 @@ passed the permission gate.
 ## Input
 
 - Valid authorized `EnumInput`.
+- Validated base URLs and optional enumerated vhost/path/API/technology context.
 - `config.yaml` with explicit `enable_nuclei` setting.
 
 ## Output
@@ -22,6 +29,7 @@ passed the permission gate.
 ## Safety Constraints
 
 - Default to skipped when Nuclei is disabled.
+- Offline mock mode may emit deterministic findings from local safe fixtures.
 - Never scan a public target.
 - Only allow severity `critical,high,medium`.
 - Exclude tags `dos,brute-force,intrusive`.

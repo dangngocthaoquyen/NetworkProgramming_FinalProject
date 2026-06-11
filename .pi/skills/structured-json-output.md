@@ -1,3 +1,8 @@
+---
+name: structured-json-output
+description: Produces valid structured JSON outputs that match the project schema. Use when generating vuln.json or normalized findings.
+---
+
 # Structured JSON Output
 
 ## Role
@@ -29,3 +34,4 @@ pipeline artifacts.
 - Reject malformed or unexpected fields according to the active schema.
 - JSON output must be syntactically valid whenever JSON is required.
 - Preserve evidence and source-agent attribution without inventing data.
+- Preserve finding `source_type` values: `service`, `os`, or `web-template`.

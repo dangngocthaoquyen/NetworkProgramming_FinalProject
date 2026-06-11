@@ -1,8 +1,28 @@
 {
   "agent_name": "nuclei_agent",
-  "scan_id": "COURSE-LAB-001",
-  "status": "skipped",
-  "message": "Nuclei is disabled in config.yaml.",
-  "data": {},
+  "scan_id": "COURSE-LAB-FULL-001",
+  "status": "success",
+  "message": "Offline Nuclei mock returned 1 findings.",
+  "data": {
+    "findings": [
+      {
+        "finding_id": "safe-lab-security-headers",
+        "cve_id": null,
+        "title": "Missing recommended HTTP security headers",
+        "host": "192.168.56.23",
+        "port": 80,
+        "source_agents": [
+          "nuclei_agent"
+        ],
+        "source_type": "web-template",
+        "severity": "medium",
+        "cvss": 5.3,
+        "confidence": 0.9,
+        "evidence": "Offline safe template fixture matched the authorized web-lab URL. Matched context: url=http://192.168.56.23/, path=/admin, vhost=app.web-lab.local.",
+        "remediation": "Review and configure appropriate HTTP security headers.",
+        "risk_score": 0.0
+      }
+    ]
+  },
   "errors": []
 }

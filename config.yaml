@@ -10,3 +10,5 @@ safety:
 scanner:
   max_concurrency: 5
   enable_nuclei: false
+  enable_nuclei_mock: true
+  nuclei_mock_db: "data/nuclei_mock_db.json"

@@ -1,3 +1,8 @@
+---
+name: risk-ranking
+description: Ranks vulnerabilities by severity, CVSS, confidence, exploitability, and lab impact. Use when prioritizing Phase 3 findings.
+---
+
 # Risk Ranking Skill
 
 ## Role

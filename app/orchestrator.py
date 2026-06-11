@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import inspect
 import json
 from dataclasses import dataclass
@@ -159,8 +160,11 @@ class Phase3Orchestrator:
                     )
                 raw_findings.append(finding)
 
+        scored_findings = [
+            score_finding(finding) for finding in deduplicate_findings(raw_findings)
+        ]
         findings = sorted(
-            (score_finding(finding) for finding in deduplicate_findings(raw_findings)),
+            Phase3Orchestrator._normalize_finding_ids(scored_findings),
             key=lambda item: (-item.risk_score, item.finding_id),
         )
         counts = {severity: 0 for severity in Severity}
@@ -179,6 +183,28 @@ class Phase3Orchestrator:
             ),
             findings=findings,
         )
+
+    @staticmethod
+    def _normalize_finding_ids(findings: list[Finding]) -> list[Finding]:
+        bases = [Phase3Orchestrator._finding_id_base(finding) for finding in findings]
+        counts = {base: bases.count(base) for base in set(bases)}
+        normalized: list[Finding] = []
+        for finding, base in zip(findings, bases, strict=True):
+            finding_id = base
+            if counts[base] > 1:
+                digest = hashlib.sha256(
+                    f"{finding.title}|{finding.evidence}".encode("utf-8")
+                ).hexdigest()[:8]
+                finding_id = f"{base}-{digest}"
+            normalized.append(finding.model_copy(update={"finding_id": finding_id}))
+        return normalized
+
+    @staticmethod
+    def _finding_id_base(finding: Finding) -> str:
+        cve_id = finding.cve_id or finding.finding_id
+        location = str(finding.port) if finding.port is not None else "os"
+        host = finding.host or "unknown-host"
+        return f"{cve_id}-{host}-{location}-{finding.source_type.value}"
 
     @staticmethod
     def _render_log(agent_results: tuple[AgentResult, ...]) -> str:

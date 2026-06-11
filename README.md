@@ -1,8 +1,9 @@
 # Phase 3 - Vulnerability Scanning MVP
 
-Scaffold Python cho Phase 3 cua bai tap pentest: nhan ket qua enumeration cua
-target lab da duoc uy quyen, dieu phoi cac buoc vulnerability scanning an toan,
-chuan hoa finding, gop ket qua va tao bao cao.
+Scaffold Python cho Phase 3 cua bai tap pentest: nhan `enum.json` tu Phase 1
+reconnaissance va Phase 2 scanning cua target lab da duoc uy quyen, dieu phoi
+cac buoc vulnerability assessment an toan, chuan hoa finding, gop ket qua va
+tao bao cao. Project khong trien khai lai Phase 1 hoac Phase 2.
 
 ## Pham vi an toan
 
@@ -41,6 +42,21 @@ Chay Phase 3 voi sample lab:
 python run_phase3.py --enum data/samples/enum_lab.json --out reports/scan-001
 ```
 
+Ba sample tap trung de kiem tra tuong thich va OS assessment:
+
+```powershell
+python run_phase3.py --enum data/samples/enum_lab_no_os.json --out outputs/test_no_os
+python run_phase3.py --enum data/samples/enum_lab_linux_os.json --out outputs/test_linux_os
+python run_phase3.py --enum data/samples/enum_lab_windows_os.json --out outputs/test_windows_os
+python run_phase3.py --enum data/samples/enum_lab_full.json --out outputs/test_full
+```
+
+`enum_lab_full.json` la demo artifact day du tu Phase 1 + Phase 2, gom nhieu
+host private lab, OS fingerprint, open ports, service/product/version, URL,
+vhost, CPE, technologies, discovered paths, API endpoints, nguon enumeration,
+confidence va banner. Phase 3 chi tieu thu artifact nay; khong tu thuc hien
+reconnaissance, DNS enumeration, dirbust hoac port scanning.
+
 Chay theo format Pi/multi-agent:
 
 ```powershell
@@ -65,6 +81,21 @@ Input mau nam tai `data/samples/enum_lab.json`. Truoc khi bo sung bat ky scanner
 nao, hay validate target theo allowlist trong `config.yaml` va dung ngay neu
 target la public IP hoac khong co uy quyen.
 
+Moi host trong `enum.json` co the co object `os` tuy chon voi name, version,
+kernel, build, architecture, patch level, confidence va source. Phase 3 chi
+dung fingerprint OS nay de lookup vulnerability candidate offline va bao cao
+rui ro; project khong tu fingerprint OS, khong exploit va khong mo rong scope.
+
+- Service-level findings duoc xac dinh tu service, product va version.
+- OS-level findings duoc xac dinh tu OS name, version, kernel va build.
+- Nuclei/template findings duoc danh dau `source_type: web-template`.
+- `cve-lookup-agent` dua CPE vao evidence khi Phase 1/2 cung cap.
+- `nuclei-agent` dung URL da validate cung vhost, discovered paths, API
+  endpoints va technologies trong offline safe fixture; khong tu discover
+  target moi.
+- Phase 3 chi nhan dien, merge va xep hang vulnerability candidates; khong khai
+  thac vulnerability.
+
 Moi enumeration input phai duoc kiem tra bang `ScopeGuard.validate_enum` truoc
 khi agent scan chay. Guard doc `safety.allowed_cidrs` va `block_public_ip` tu
 `config.yaml`, dong thoi chan IP public, IP ngoai allowlist va hostname resolve
@@ -80,14 +111,21 @@ ro rang, agent chi chay URL da qua scope guard, chi cho phep severity
 subprocess hoac timeout duoc tra ve trong `AgentResult` thay vi lam crash
 pipeline.
 
-Pipeline deduplicate finding theo `host`, `port`, `cve_id` va `title`, dong
-thoi merge `source_agents` va evidence. Risk score duoc tinh theo
+Pipeline deduplicate finding theo `host`, `port`, `cve_id`, `title` va
+`source_type`, dong thoi merge `source_agents` va evidence. Risk score duoc tinh theo
 `cvss * 10 * confidence`, cong them `5` khi co Nuclei confirmation va gioi han
 toi da `100`. Report Markdown gom Executive Summary, Scope, Findings by
 Severity, Technical Details, Remediation va Appendix.
 
+Severity trong `vuln.json` duoc chuan hoa theo CVSS: `critical` tu 9.0,
+`high` tu 7.0, `medium` tu 4.0, `low` tren 0 va `info` tai 0. Moi finding co
+`finding_id` xac dinh theo CVE/template, host, port hoac OS, va source type.
+Full demo dung fixture web-template offline an toan; real Nuclei van bi tat mac
+dinh.
+
 ## Luu y uy quyen
 
-Chi su dung project trong lab, CTF, hoac he thong co van ban uy quyen. Nguoi
-van hanh chiu trach nhiem xac minh pham vi va phe duyet truoc khi scan.
+Chi su dung project trong local lab, CTF, hoac he thong co van ban uy quyen.
+Nguoi van hanh chiu trach nhiem xac minh pham vi va phe duyet truoc khi scan.
 Project khong scan public Internet va khong tu mo rong pham vi target.
+Project khong exploit, brute force, DoS hoac chay intrusive scan.

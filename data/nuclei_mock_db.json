@@ -1,0 +1,17 @@
+{
+  "records": [
+    {
+      "template_id": "safe-lab-security-headers",
+      "url": "http://192.168.56.23/",
+      "path": "/admin",
+      "vhost": "app.web-lab.local",
+      "technology": "Laravel",
+      "title": "Missing recommended HTTP security headers",
+      "severity": "medium",
+      "cvss": 5.3,
+      "confidence": 0.9,
+      "evidence": "Offline safe template fixture matched the authorized web-lab URL.",
+      "remediation": "Review and configure appropriate HTTP security headers."
+    }
+  ]
+}

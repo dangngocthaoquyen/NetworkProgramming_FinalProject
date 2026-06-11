@@ -51,3 +51,19 @@ def test_enum_rejects_any_public_host(scope_guard: ScopeGuard):
 
     with pytest.raises(ScopeViolationError, match="Public IP is blocked"):
         scope_guard.validate_enum(enum_input)
+
+
+def test_enum_allows_inventory_hostname_when_ip_is_in_scope(scope_guard: ScopeGuard):
+    enum_input = {
+        "scan_id": "inventory-hostname",
+        "target": "authorized-lab",
+        "hosts": [
+            {
+                "ip": "192.168.1.10",
+                "hostname": "linux-lab",
+                "ports": [],
+            }
+        ],
+    }
+
+    assert scope_guard.validate_enum(enum_input).hosts[0].hostname == "linux-lab"

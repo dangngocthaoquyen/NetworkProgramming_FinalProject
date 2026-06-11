@@ -8,11 +8,11 @@ from pathlib import Path
 
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.agent_result_schema import AgentResult, AgentStatus
-from app.schemas.enum_schema import EnumInput, Port
-from app.schemas.vuln_schema import Finding, Severity
+from app.schemas.enum_schema import EnumInput, OperatingSystem, Port
+from app.schemas.vuln_schema import Finding, Severity, SourceType
 
 
 DEFAULT_CVE_DB_PATH = Path(__file__).resolve().parents[2] / "data" / "cve_mock_db.json"
@@ -33,13 +33,26 @@ class CveRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     cve_id: str = Field(pattern=r"^CVE-\d{4}-\d{4,}$")
-    product: str = Field(min_length=1)
+    source_type: SourceType = SourceType.SERVICE
+    product: str | None = Field(default=None, min_length=1)
     match_type: MatchType
     version: str | None = None
     version_range: str | None = None
+    os_name: str | None = None
+    os_version: str | None = None
+    kernel: str | None = None
+    build: str | None = None
     cvss: float = Field(ge=0, le=10)
     title: str = Field(min_length=1)
     remediation: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_lookup_fields(self) -> CveRecord:
+        if self.source_type is SourceType.SERVICE and self.product is None:
+            raise ValueError("Service CVE records require product")
+        if self.source_type is SourceType.OS and self.os_name is None:
+            raise ValueError("OS CVE records require os_name")
+        return self
 
 
 class CveMockDatabase(BaseModel):
@@ -70,6 +83,8 @@ class CveLookupAgent:
         for host in enum_input.hosts:
             for port in host.ports:
                 for record in database.records:
+                    if record.source_type is not SourceType.SERVICE:
+                        continue
                     confidence = self._match_confidence(port, record)
                     if confidence is None or record.cvss < MINIMUM_CVSS:
                         continue
@@ -82,10 +97,40 @@ class CveLookupAgent:
                             host=str(host.ip),
                             port=port.port,
                             source_agents=[self.agent_name],
+                            source_type=SourceType.SERVICE,
                             severity=self._severity_for_cvss(record.cvss),
                             cvss=record.cvss,
                             confidence=confidence,
                             evidence=self._evidence(str(host.ip), port, record),
+                            remediation=record.remediation,
+                            risk_score=round(record.cvss * confidence, 2),
+                        )
+                    )
+
+            if host.os is not None:
+                for record in database.records:
+                    if record.source_type is not SourceType.OS:
+                        continue
+                    confidence = self._os_match_confidence(host.os, record)
+                    if confidence is None or record.cvss < MINIMUM_CVSS:
+                        continue
+                    confidence = self._combine_os_confidence(
+                        confidence, host.os.confidence
+                    )
+
+                    findings.append(
+                        Finding(
+                            finding_id=record.cve_id,
+                            cve_id=record.cve_id,
+                            title=f"{record.cve_id}: {record.title}",
+                            host=str(host.ip),
+                            port=None,
+                            source_agents=[self.agent_name],
+                            source_type=SourceType.OS,
+                            severity=self._severity_for_cvss(record.cvss),
+                            cvss=record.cvss,
+                            confidence=confidence,
+                            evidence=self._os_evidence(str(host.ip), host.os, record),
                             remediation=record.remediation,
                             risk_score=round(record.cvss * confidence, 2),
                         )
@@ -111,7 +156,7 @@ class CveLookupAgent:
             agent_name=self.agent_name,
             scan_id=enum_input.scan_id,
             status=AgentStatus.SUCCESS,
-            message=f"Found {len(findings)} high-severity local CVE matches.",
+            message=f"Found {len(findings)} high-severity offline CVE matches.",
             data={"findings": [finding.model_dump(mode="json") for finding in findings]},
         )
 
@@ -122,7 +167,7 @@ class CveLookupAgent:
     @staticmethod
     def _match_confidence(port: Port, record: CveRecord) -> float | None:
         product = port.product or port.service
-        if product.casefold() != record.product.casefold():
+        if record.product is None or product.casefold() != record.product.casefold():
             return None
 
         if record.match_type is MatchType.PRODUCT:
@@ -147,6 +192,46 @@ class CveLookupAgent:
         return None
 
     @staticmethod
+    def _os_match_confidence(
+        operating_system: OperatingSystem, record: CveRecord
+    ) -> float | None:
+        if (
+            operating_system.name is None
+            or record.os_name is None
+            or CveLookupAgent._normalized_os_name(operating_system)
+            != " ".join(record.os_name.casefold().split())
+        ):
+            return None
+
+        expected_fields = (
+            (record.os_version, operating_system.version),
+            (record.kernel, operating_system.kernel),
+            (record.build, operating_system.build),
+        )
+        for expected, actual in expected_fields:
+            if expected is not None and (
+                actual is None or actual.casefold() != expected.casefold()
+            ):
+                return None
+
+        return 0.95
+
+    @staticmethod
+    def _normalized_os_name(operating_system: OperatingSystem) -> str:
+        name = " ".join((operating_system.name or "").casefold().split())
+        if name == "windows" and operating_system.version:
+            return f"{name} {operating_system.version.casefold()}"
+        return name
+
+    @staticmethod
+    def _combine_os_confidence(
+        local_match_confidence: float, fingerprint_confidence: float | None
+    ) -> float:
+        if fingerprint_confidence is None:
+            return local_match_confidence
+        return round(local_match_confidence * (fingerprint_confidence / 100), 3)
+
+    @staticmethod
     def _severity_for_cvss(cvss: float) -> Severity:
         return Severity.CRITICAL if cvss >= 9.0 else Severity.HIGH
 
@@ -154,7 +239,28 @@ class CveLookupAgent:
     def _evidence(host_ip: str, port: Port, record: CveRecord) -> str:
         product = port.product or port.service
         version = port.version or "unknown"
-        return (
+        evidence = (
             f"Offline mock DB matched {product} {version} on "
             f"{host_ip}:{port.port}/{port.protocol} using {record.match_type.value} match."
         )
+        if port.cpe:
+            evidence += f" Enumerated CPE: {', '.join(port.cpe)}."
+        return evidence
+
+    @staticmethod
+    def _os_evidence(
+        host_ip: str, operating_system: OperatingSystem, record: CveRecord
+    ) -> str:
+        matched = [
+            f"name={operating_system.name or 'unknown'}",
+            f"version={operating_system.version or 'unknown'}",
+            f"kernel={operating_system.kernel or 'unknown'}",
+            f"build={operating_system.build or 'unknown'}",
+        ]
+        evidence = (
+            f"Offline mock DB matched OS fingerprint on {host_ip}: "
+            f"{', '.join(matched)} using {record.match_type.value} match."
+        )
+        if operating_system.cpe:
+            evidence += f" Enumerated OS CPE: {', '.join(operating_system.cpe)}."
+        return evidence

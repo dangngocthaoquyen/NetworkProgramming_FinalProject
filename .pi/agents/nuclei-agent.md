@@ -9,6 +9,8 @@ validated URLs.
 
 - A validated `EnumInput` object.
 - `config.yaml` with `enable_nuclei` and safety scope settings.
+- Validated base URLs plus optional vhost, technology, discovered-path, and API
+  endpoint metadata supplied by earlier phases.
 
 ## Output
 
@@ -26,6 +28,9 @@ validated URLs.
 ## Safety Constraints
 
 - Default to skipped when `enable_nuclei: false`.
+- An explicitly enabled offline mock mode may read only local safe fixtures;
+  it must not launch a subprocess or contact a target.
+- Vhosts and paths are context only and must not expand authorized scope.
 - Never run against a public target or an URL that has not passed scope guard.
 - Only allow severity `critical`, `high`, and `medium`.
 - Exclude templates tagged `dos`, `brute-force`, or `intrusive`.

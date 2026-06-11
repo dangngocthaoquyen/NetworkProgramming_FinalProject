@@ -1,8 +1,14 @@
+---
+name: report-write
+description: Writes structured Phase 3 vulnerability reports from normalized findings, evidence, severity, and remediation data.
+---
+
 # Report Writing Skill
 
 ## Role
 
-Render real merged pipeline results into the final authorized scan report.
+Render real merged pipeline results and optional host OS inventory into the
+final authorized scan report.
 
 ## Input
 
