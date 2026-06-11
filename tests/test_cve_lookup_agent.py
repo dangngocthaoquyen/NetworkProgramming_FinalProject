@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from app.agents.cve_lookup_agent import CveLookupAgent
 from app.schemas.agent_result_schema import AgentStatus
 from app.schemas.enum_schema import EnumInput
@@ -58,15 +60,17 @@ def test_only_returns_cves_with_cvss_at_least_seven():
     assert findings == []
 
 
-def test_run_returns_common_agent_result():
-    result = CveLookupAgent().run(make_enum("OpenSSH", "7.2"))
+@pytest.mark.asyncio
+async def test_run_returns_common_agent_result():
+    result = await CveLookupAgent().run(make_enum("OpenSSH", "7.2"))
 
     assert result.status is AgentStatus.SUCCESS
     assert result.data["findings"][0]["finding_id"] == "CVE-2016-0777"
 
 
-def test_database_error_does_not_escape_agent(tmp_path: Path):
-    result = CveLookupAgent(tmp_path / "missing.json").run(
+@pytest.mark.asyncio
+async def test_database_error_does_not_escape_agent(tmp_path: Path):
+    result = await CveLookupAgent(tmp_path / "missing.json").run(
         make_enum("OpenSSH", "7.2")
     )
 

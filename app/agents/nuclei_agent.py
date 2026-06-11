@@ -18,7 +18,7 @@ from app.schemas.vuln_schema import Finding, Severity, SourceType
 from app.tools.scope_guard import ScopeGuard, ScopeViolationError
 
 
-ALLOWED_SEVERITIES = ("critical", "high", "medium")
+ALLOWED_SEVERITIES = ("critical", "high")
 EXCLUDED_TAGS = ("dos", "brute-force", "intrusive")
 
 
@@ -129,6 +129,9 @@ class NucleiAgent:
                 f"path={matched_context['path']}",
                 f"vhost={matched_context['vhost'] or 'N/A'}",
             ]
+            severity = Severity(str(record["severity"]).lower())
+            if severity.value not in ALLOWED_SEVERITIES:
+                continue
             findings.append(
                 Finding(
                     finding_id=str(record["template_id"]),
@@ -137,7 +140,7 @@ class NucleiAgent:
                     port=parsed_url.port or (443 if parsed_url.scheme == "https" else 80),
                     source_agents=[self.agent_name],
                     source_type=SourceType.WEB_TEMPLATE,
-                    severity=Severity(str(record["severity"]).lower()),
+                    severity=severity,
                     cvss=float(record["cvss"]),
                     confidence=float(record["confidence"]),
                     evidence=f"{record['evidence']} Matched context: {', '.join(details)}.",

@@ -3,14 +3,14 @@
   "summary": {
     "total": 4,
     "critical": 0,
-    "high": 4,
-    "medium": 0,
+    "high": 3,
+    "medium": 1,
     "low": 0,
     "info": 0
   },
   "findings": [
     {
-      "finding_id": "CVE-2099-1001-192.168.56.10-os-os",
+      "finding_id": "CVE-2099-1001",
       "cve_id": "CVE-2099-1001",
       "title": "CVE-2099-1001: Mock Ubuntu kernel vulnerability candidate",
       "host": "192.168.56.10",
@@ -21,13 +21,30 @@
       "source_type": "os",
       "severity": "high",
       "cvss": 8.4,
-      "confidence": 0.874,
+      "confidence": 0.95,
       "evidence": "Offline mock DB matched OS fingerprint on 192.168.56.10: name=Ubuntu, version=22.04, kernel=5.15.0, build=unknown using exact match.",
       "remediation": "Review Ubuntu security notices and apply the approved kernel update.",
-      "risk_score": 73.42
+      "risk_score": 79.8
     },
     {
-      "finding_id": "CVE-2021-41773-192.168.56.10-8080-service",
+      "finding_id": "CVE-2099-1002",
+      "cve_id": "CVE-2099-1002",
+      "title": "CVE-2099-1002: Mock Windows 10 build vulnerability candidate",
+      "host": "192.168.56.11",
+      "port": null,
+      "source_agents": [
+        "cve_lookup_agent"
+      ],
+      "source_type": "os",
+      "severity": "high",
+      "cvss": 7.8,
+      "confidence": 0.95,
+      "evidence": "Offline mock DB matched OS fingerprint on 192.168.56.11: name=Windows 10, version=22H2, kernel=unknown, build=19045 using exact match.",
+      "remediation": "Review Microsoft security guidance and apply approved cumulative updates.",
+      "risk_score": 74.1
+    },
+    {
+      "finding_id": "CVE-2021-41773",
       "cve_id": "CVE-2021-41773",
       "title": "CVE-2021-41773: Apache HTTP Server path traversal",
       "host": "192.168.56.10",
@@ -44,24 +61,7 @@
       "risk_score": 71.25
     },
     {
-      "finding_id": "CVE-2099-1002-192.168.56.11-os-os",
-      "cve_id": "CVE-2099-1002",
-      "title": "CVE-2099-1002: Mock Windows 10 build vulnerability candidate",
-      "host": "192.168.56.11",
-      "port": null,
-      "source_agents": [
-        "cve_lookup_agent"
-      ],
-      "source_type": "os",
-      "severity": "high",
-      "cvss": 7.8,
-      "confidence": 0.836,
-      "evidence": "Offline mock DB matched OS fingerprint on 192.168.56.11: name=Windows 10, version=22H2, kernel=unknown, build=19045 using exact match.",
-      "remediation": "Review Microsoft security guidance and apply approved cumulative updates.",
-      "risk_score": 65.21
-    },
-    {
-      "finding_id": "CVE-2099-0001-192.168.56.10-80-service",
+      "finding_id": "CVE-2099-0001",
       "cve_id": "CVE-2099-0001",
       "title": "CVE-2099-0001: Mock nginx old-version finding",
       "host": "192.168.56.10",
@@ -70,7 +70,7 @@
         "cve_lookup_agent"
       ],
       "source_type": "service",
-      "severity": "high",
+      "severity": "medium",
       "cvss": 8.1,
       "confidence": 0.8,
       "evidence": "Offline mock DB matched nginx 1.18.0 on 192.168.56.10:80/tcp using range match.",

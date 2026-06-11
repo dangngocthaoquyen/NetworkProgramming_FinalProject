@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from enum import StrEnum
 from pathlib import Path
@@ -138,10 +139,11 @@ class CveLookupAgent:
 
         return findings
 
-    def run(self, enum_input: EnumInput) -> AgentResult:
+    async def run(self, enum_input: EnumInput) -> AgentResult:
         """Run lookup without allowing agent errors to crash the pipeline."""
 
         try:
+            await asyncio.sleep(0)
             findings = self.lookup(enum_input)
         except Exception as exc:
             return AgentResult(

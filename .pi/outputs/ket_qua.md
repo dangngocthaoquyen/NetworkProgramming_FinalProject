@@ -183,8 +183,8 @@ The authorized Phase 3 scan produced 7 normalized findings.
 | Severity | Count |
 | --- | ---: |
 | Critical | 0 |
-| High | 6 |
-| Medium | 1 |
+| High | 7 |
+| Medium | 0 |
 | Low | 0 |
 | Info | 0 |
 
@@ -268,15 +268,15 @@ The authorized Phase 3 scan produced 7 normalized findings.
 - Source agents: cve_lookup_agent
 - Evidence: Offline mock DB matched nginx 1.18.0 on 192.168.56.23:80/tcp using range match. Enumerated CPE: cpe:/a:nginx:nginx:1.18.0.
 
-### Missing recommended HTTP security headers
+### High-risk exposed administrative interface
 
 - CVE ID: safe-lab-security-headers-192.168.56.23-80-web-template
 - Host: 192.168.56.23
 - Port: 80
-- Severity: medium
-- CVSS: 5.3
-- Confidence: 0.90
-- Risk score: 52.70
+- Severity: high
+- CVSS: 7.0
+- Confidence: 0.80
+- Risk score: 61.00
 - Source type: web-template
 - Source agents: nuclei_agent
 - Evidence: Offline safe template fixture matched the authorized web-lab URL. Matched context: url=http://192.168.56.23/, path=/admin, vhost=app.web-lab.local.
@@ -289,7 +289,7 @@ The authorized Phase 3 scan produced 7 normalized findings.
 - **CVE-2099-0001: Mock nginx old-version finding:** Upgrade nginx to a supported release after compatibility testing.
 - **CVE-2099-0001: Mock nginx old-version finding:** Upgrade nginx to a supported release after compatibility testing.
 - **CVE-2099-0001: Mock nginx old-version finding:** Upgrade nginx to a supported release after compatibility testing.
-- **Missing recommended HTTP security headers:** Review and configure appropriate HTTP security headers.
+- **High-risk exposed administrative interface:** Restrict administrative paths to trusted networks and require strong authentication.
 
 ## Appendix
 

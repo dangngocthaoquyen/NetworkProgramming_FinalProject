@@ -6,8 +6,10 @@ import asyncio
 import hashlib
 import inspect
 import json
+from datetime import UTC, datetime
 from dataclasses import dataclass
 from pathlib import Path
+from time import perf_counter
 from typing import Any, Protocol
 
 import yaml
@@ -124,13 +126,28 @@ class Phase3Orchestrator:
         self, agent: Agent, enum_input: EnumInput, semaphore: asyncio.Semaphore
     ) -> AgentResult:
         async with semaphore:
-            if inspect.iscoroutinefunction(agent.run):
-                result = await agent.run(enum_input)
-            else:
-                result = await asyncio.to_thread(agent.run, enum_input)
-            if not isinstance(result, AgentResult):
-                raise TypeError(f"{agent.agent_name} returned an invalid result")
-            return result
+            started_at = datetime.now(UTC)
+            started_perf = perf_counter()
+            try:
+                if inspect.iscoroutinefunction(agent.run):
+                    result = await agent.run(enum_input)
+                else:
+                    result = await asyncio.to_thread(agent.run, enum_input)
+                if not isinstance(result, AgentResult):
+                    raise TypeError(f"{agent.agent_name} returned an invalid result")
+            except Exception as exc:
+                return self._timed_result(
+                    AgentResult(
+                        agent_name=agent.agent_name,
+                        scan_id=enum_input.scan_id,
+                        status=AgentStatus.FAILED,
+                        message="Agent raised an unhandled exception.",
+                        errors=[str(exc)],
+                    ),
+                    started_at,
+                    started_perf,
+                )
+            return self._timed_result(result, started_at, started_perf)
 
     @staticmethod
     def _normalize_result(
@@ -145,6 +162,20 @@ class Phase3Orchestrator:
             message="Agent raised an unhandled exception.",
             errors=[str(result)],
         )
+
+    @staticmethod
+    def _timed_result(
+        result: AgentResult, started_at: datetime, started_perf: float
+    ) -> AgentResult:
+        ended_at = datetime.now(UTC)
+        timing = {
+            "started_at": started_at.isoformat(),
+            "ended_at": ended_at.isoformat(),
+            "duration_seconds": round(perf_counter() - started_perf, 6),
+        }
+        data = dict(result.data)
+        data["agent_timing"] = timing
+        return result.model_copy(update={"data": data})
 
     @staticmethod
     def _merge_results(

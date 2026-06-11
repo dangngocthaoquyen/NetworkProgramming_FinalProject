@@ -36,6 +36,15 @@ python -m pip install -r requirements.txt
 python -m pytest
 ```
 
+Tren Linux/macOS:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m pytest
+```
+
 Chay Phase 3 voi sample lab:
 
 ```powershell
@@ -69,8 +78,9 @@ that cua pipeline vao:
 - `.pi/outputs/vuln.json`: findings da merge va risk-ranked.
 - `.pi/outputs/ket_qua.md`: bao cao Markdown cuoi.
 - `.pi/outputs/cve_candidates.json`: ket qua that cua CVE Lookup Agent.
-- `.pi/outputs/nuclei_results.json`: ket qua that cua Nuclei Agent, thuong la
-  `skipped` khi Nuclei dang tat.
+- `.pi/outputs/nuclei_results.json`: ket qua cua Nuclei Agent. O che do demo
+  an toan mac dinh, agent dung offline mock fixture/cache trong repo; real
+  Nuclei chi chay khi duoc bat ro rang va van phai qua scope guard.
 - `.pi/logs/pipeline.log`: trang thai va loi cua cac agent.
 
 Lenh sample thuong cung tao `reports/scan-001/vuln.json`,
@@ -101,21 +111,31 @@ khi agent scan chay. Guard doc `safety.allowed_cidrs` va `block_public_ip` tu
 `config.yaml`, dong thoi chan IP public, IP ngoai allowlist va hostname resolve
 ra dia chi khong duoc phep.
 
-`CveLookupAgent` thuc hien lookup offline tu `data/cve_mock_db.json`, khong goi
-API Internet. Agent chi tra ve cac match co CVSS tu `7.0` tro len va gan
-confidence theo muc do khop product/version.
+`CveLookupAgent` hien la offline CVE adapter dung `data/cve_mock_db.json` de
+demo an toan, khong goi API Internet. Agent lookup theo service/product/version
+va OS fingerprint, chi tra ve cac match co CVSS tu `7.0` tro len va gan
+confidence theo muc do khop. Extension tiep theo nen them NVD/OSV client co
+cache offline va timeout, nhung khong bat buoc cho demo local an toan.
 
-`NucleiAgent` mac dinh tra ve `skipped` vi `enable_nuclei: false`. Khi duoc bat
-ro rang, agent chi chay URL da qua scope guard, chi cho phep severity
-`critical,high,medium`, va loai tru tag `dos,brute-force,intrusive`. Loi binary,
-subprocess hoac timeout duoc tra ve trong `AgentResult` thay vi lam crash
-pipeline.
+`NucleiAgent` mac dinh khong chay real scanner vi `enable_nuclei: false`.
+Demo offline safe mode co the tra ve fixture web-template tu
+`data/nuclei_mock_db.json` khi `enable_nuclei_mock: true`. Ca mock mode va real
+mode chi chap nhan severity `critical,high`; `medium`, `low` va `info` bi loai
+de dung Topic 06. Khi real mode duoc bat ro rang, agent chi chay URL da qua
+scope guard, dung `-no-interactsh`, loai tru tag `dos,brute-force,intrusive`,
+va khong tu discover target moi. Loi binary, subprocess hoac timeout duoc tra
+ve trong `AgentResult` thay vi lam crash pipeline.
 
 Pipeline deduplicate finding theo `host`, `port`, `cve_id`, `title` va
 `source_type`, dong thoi merge `source_agents` va evidence. Risk score duoc tinh theo
 `cvss * 10 * confidence`, cong them `5` khi co Nuclei confirmation va gioi han
 toi da `100`. Report Markdown gom Executive Summary, Scope, Findings by
 Severity, Technical Details, Remediation va Appendix.
+
+Orchestrator chay cac agent doc lap bang `asyncio.gather` voi semaphore gioi
+han boi `scanner.max_concurrency`. Log JSONL ghi `agent_timing.started_at`,
+`ended_at` va `duration_seconds` cho tung agent de chung minh cac agent co the
+overlap thoi gian chay.
 
 Severity trong `vuln.json` duoc chuan hoa theo CVSS: `critical` tu 9.0,
 `high` tu 7.0, `medium` tu 4.0, `low` tren 0 va `info` tai 0. Moi finding co

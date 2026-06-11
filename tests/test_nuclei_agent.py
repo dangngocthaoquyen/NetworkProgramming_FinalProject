@@ -110,7 +110,8 @@ async def test_safe_command_and_jsonl_parsing(
     assert result.status is AgentStatus.SUCCESS
     assert result.data["findings"][0]["severity"] == "high"
     assert result.data["findings"][0]["source_type"] == SourceType.WEB_TEMPLATE.value
-    assert "critical,high,medium" in calls[0]
+    assert "critical,high" in calls[0]
+    assert "medium" not in calls[0]
     assert "dos,brute-force,intrusive" in calls[0]
 
 
@@ -176,6 +177,39 @@ async def test_offline_mock_returns_safe_web_template_finding(tmp_path: Path):
                         "template_id": "safe-mock",
                         "url": "http://192.168.1.10/",
                         "title": "Safe mock finding",
+                        "severity": "high",
+                        "cvss": 7.0,
+                        "confidence": 0.8,
+                        "evidence": "Offline fixture evidence.",
+                        "remediation": "Review configuration.",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    config = tmp_path / "config.yaml"
+    write_mock_config(config, mock_db)
+
+    result = await NucleiAgent(config).run(make_enum())
+
+    assert result.status is AgentStatus.SUCCESS
+    assert result.data["findings"][0]["source_type"] == "web-template"
+    assert result.data["findings"][0]["severity"] == "high"
+    assert result.data["findings"][0]["cvss"] == 7.0
+
+
+@pytest.mark.asyncio
+async def test_offline_mock_ignores_medium_template_findings(tmp_path: Path):
+    mock_db = tmp_path / "mock.json"
+    mock_db.write_text(
+        json.dumps(
+            {
+                "records": [
+                    {
+                        "template_id": "medium-mock",
+                        "url": "http://192.168.1.10/",
+                        "title": "Medium mock finding",
                         "severity": "medium",
                         "cvss": 5.3,
                         "confidence": 0.9,
@@ -192,9 +226,8 @@ async def test_offline_mock_returns_safe_web_template_finding(tmp_path: Path):
 
     result = await NucleiAgent(config).run(make_enum())
 
-    assert result.status is AgentStatus.SUCCESS
-    assert result.data["findings"][0]["source_type"] == "web-template"
-    assert result.data["findings"][0]["cvss"] == 5.3
+    assert result.status is AgentStatus.SKIPPED
+    assert "disabled" in result.message.lower()
 
 
 @pytest.mark.asyncio
@@ -211,9 +244,9 @@ async def test_offline_mock_uses_enriched_path_vhost_and_technology(tmp_path: Pa
                         "vhost": "app.lab.local",
                         "technology": "Laravel",
                         "title": "Safe enriched mock finding",
-                        "severity": "medium",
-                        "cvss": 5.3,
-                        "confidence": 0.9,
+                        "severity": "high",
+                        "cvss": 7.0,
+                        "confidence": 0.8,
                         "evidence": "Offline fixture evidence.",
                         "remediation": "Review configuration.",
                     }
