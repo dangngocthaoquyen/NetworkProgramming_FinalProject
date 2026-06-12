@@ -1,277 +1,236 @@
-# Phase 3 - Vulnerability Scanning MVP
+# Phase 3 Vulnerability Scanning MVP
 
-Scaffold Python cho Phase 3 cua bai tap pentest: nhan `enum.json` tu Phase 1
-reconnaissance va Phase 2 scanning cua target lab da duoc uy quyen, dieu phoi
-cac buoc vulnerability assessment an toan, chuan hoa finding, gop ket qua va
-tao bao cao. Project khong trien khai lai Phase 1 hoac Phase 2.
+Project này triển khai **Phase 3 - Vulnerability Scanning** trong quy trình
+pentesting một mục tiêu đã được cho phép. Pipeline nhận artifact `enum.json`
+từ giai đoạn enumeration trước đó, chạy các agent kiểm tra lỗ hổng, chuẩn hóa
+và hợp nhất kết quả, xếp hạng rủi ro, sau đó tạo `vuln.json` và báo cáo
+Markdown.
 
-## Pham vi an toan
+Project chỉ thực hiện vulnerability assessment. Project không tự thực hiện
+reconnaissance, không mở rộng phạm vi mục tiêu và không khai thác lỗ hổng.
 
-- Chi scan target ma ban co uy quyen ro rang.
-- Cau hinh mac dinh chi cho phep localhost va cac mang private:
-  `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`.
-- Public IP bi chan mac dinh.
-- `max_concurrency` duoc gioi han o `5`.
-- Nuclei mac dinh chay `cli` mode cho lab run, nhung van giu `mock` mode de demo offline/fallback.
-- CVE lookup co the chay `mock`, `nvd_live`, hoac `auto` voi cache NVD.
-- Project khong thuc hien exploit, brute force, DoS hoac scan Internet public.
+## Mục tiêu
 
-## Cau truc
+- Nhận dữ liệu enumeration có cấu trúc từ `enum.json`.
+- Kiểm tra mọi host bằng scope guard trước khi chạy agent.
+- Chạy độc lập các agent CVE lookup và Nuclei bằng pipeline bất đồng bộ.
+- Chuẩn hóa, deduplicate, merge và xếp hạng vulnerability candidates.
+- Lưu kết quả JSON phục vụ triage và tạo báo cáo Markdown dễ kiểm tra.
+- Cung cấp chế độ demo an toàn, có thể tái lập bằng sample và mock data.
 
-- `app/agents`: dieu phoi workflow scanning.
-- `app/schemas`: schema cho input, finding va report.
-- `app/tools`: wrapper an toan cho cac scanner duoc phep.
-- `app/merge`: chuan hoa, loai trung va gop finding.
-- `app/reports`: tao bao cao.
-- `data/samples`: input enumeration mau cho Phase 3.
-- `tests`: kiem tra guardrail va hanh vi cua project.
+## Kiến trúc và luồng xử lý
 
-## Cai dat va chay
+```text
+enum.json
+   |
+   v
+Schema validation + ScopeGuard
+   |
+   +--> cve_lookup_agent
+   |
+   +--> nuclei_agent
+   |
+   v
+Deduplicate + Merge + Risk scoring
+   |
+   +--> triage/*.json
+   +--> reports/<scan>/vuln.json
+   +--> reports/<scan>/report.md
+   +--> logs/*.log
+```
 
-Tao virtual environment, cai dependency va chay smoke test:
+`Phase3Orchestrator` chạy các agent độc lập bằng `asyncio.gather` và giới hạn
+concurrency bằng `asyncio.Semaphore`. Một agent lỗi sẽ trả về trạng thái lỗi
+trong `AgentResult` thay vì làm dừng toàn bộ pipeline.
+
+Theo cấu hình hiện tại:
+
+- `cve_lookup_agent` dùng chế độ `auto`: ưu tiên cache hoặc NVD khi được cấu
+  hình phù hợp, và có thể dùng mock database để demo an toàn.
+- `nuclei_agent` mặc định chạy ở chế độ `mock`; chế độ CLI thật tùy theo
+  `config.yaml`, binary Nuclei và môi trường của người chạy.
+- Chỉ các CVE đạt ngưỡng CVSS cấu hình và các severity Nuclei được cho phép
+  mới được đưa vào kết quả.
+
+## Cấu trúc project
+
+```text
+.
+|-- .pi/                 # Tài nguyên hỗ trợ workflow Pi của project
+|-- app/                 # Source code chính của Phase 3
+|   |-- agents/          # CVE lookup agent và Nuclei agent
+|   |-- merge/           # Deduplicate, merge và risk scoring
+|   |-- normalizers/     # Chuẩn hóa enum input
+|   |-- reports/         # Sinh báo cáo Markdown
+|   |-- schemas/         # Pydantic schemas cho input/output/agent result
+|   `-- tools/           # Scope guard và NVD client
+|-- data/                # Sample input, Pi input và mock databases
+|-- docs/                # Tài liệu bổ sung và tài liệu lưu trữ
+|-- logs/                # Log pipeline và trạng thái agent
+|-- reports/             # Output theo từng lần chạy và báo cáo Markdown
+|-- tests/               # Test suite bằng pytest
+|-- triage/              # JSON kết quả mới nhất phục vụ triage/workflow
+|-- config.yaml          # Cấu hình scope, concurrency, CVE lookup và Nuclei
+|-- requirements.txt     # Python dependencies
+`-- run_phase3.py        # CLI entry point
+```
+
+Vai trò các thư mục chính:
+
+- `.pi/`: chứa tài nguyên hỗ trợ cho workflow Pi như agent, prompt, skill và
+  thiết lập liên quan. Nội dung cụ thể tùy theo cấu hình project.
+- `app/`: chứa toàn bộ logic ứng dụng, được tách thành agent, schema, tool,
+  normalizer, merge/scoring và report.
+- `data/`: chứa input mẫu trong `data/samples/`, input theo workflow Pi trong
+  `data/pi/` và mock database dùng cho demo an toàn.
+- `reports/`: nên được dùng làm giá trị `--out`; mỗi thư mục scan chứa
+  `vuln.json` và `report.md`.
+- `triage/`: chứa bản JSON kết quả mới nhất, gồm `vuln.json`,
+  `cve_candidates.json` và `nuclei_results.json`.
+- `logs/`: chứa log theo lần chạy và `pipeline.log`, bao gồm trạng thái, lỗi
+  và timing của agent.
+- `tests/`: chứa test cho schema, scope guard, normalizer, agent, NVD client,
+  merge, scoring và orchestrator.
+
+## Yêu cầu môi trường
+
+- Windows 10/11
+- Python 3.11 trở lên
+- PowerShell
+- Nuclei chỉ cần thiết khi chủ động cấu hình chạy CLI thật
+- Không bắt buộc sử dụng `.venv`
+
+## Cài đặt trên Windows
+
+Project có thể chạy trực tiếp bằng Python hiện tại, không bắt buộc kích hoạt
+`.venv`. Tại thư mục gốc của project, kiểm tra Python và cài dependencies:
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+python --version
+python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 python -m pytest
 ```
 
-Tren Linux/macOS:
+Nên dùng Python 3.11 trở lên. Lệnh `python -m pip` giúp bảo đảm dependencies
+được cài cho đúng interpreter đang dùng để chạy project.
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
+Nếu muốn tách môi trường Python, người dùng có thể tự tạo virtual environment,
+nhưng project không yêu cầu bắt buộc.
+
+## Cấu hình `.env`
+
+Tạo file `.env` tại thư mục gốc của project khi cần lưu biến môi trường như
+`OPENAI_API_KEY` hoặc `NVD_API_KEY`. `.env` là file văn bản chứa biến môi
+trường và secret, không phải virtual environment `.venv`. Không commit `.env`
+hoặc API key thật lên GitHub.
+
+Ví dụ nội dung:
+
+```dotenv
+# Dành cho tích hợp OpenAI nếu project được cấu hình sử dụng.
+OPENAI_API_KEY=your_openai_api_key_here
+
+# Dùng khi cần gọi NVD API trong chế độ phù hợp.
+NVD_API_KEY=your_nvd_api_key_here
+```
+
+Source hiện tại đọc `NVD_API_KEY` cho CVE lookup. `OPENAI_API_KEY` có thể được
+lưu trong `.env` cho tích hợp OpenAI tùy theo cấu hình hoặc phần mở rộng, nhưng
+pipeline Phase 3 hiện tại không bắt buộc key này. Nếu không có `NVD_API_KEY`,
+hành vi CVE lookup phụ thuộc vào `config.yaml`, cache hiện có và mock database
+của project.
+
+## Chạy test
+
+Sau khi cài dependencies:
+
+```powershell
 python -m pytest
 ```
 
-Chay Phase 3 voi sample lab:
+Chạy test với output ngắn:
+
+```powershell
+python -m pytest -q
+```
+
+## Chạy pipeline
+
+Cú pháp chung:
+
+```powershell
+python run_phase3.py --enum <duong-dan-enum.json> --out <thu-muc-output>
+```
+
+Ví dụ với sample lab cơ bản:
 
 ```powershell
 python run_phase3.py --enum data/samples/enum_lab.json --out reports/scan-001
 ```
 
-Chay demo voi sample duoc import tu Nmap XML cua Metasploitable3 Ubuntu:
+Ví dụ với sample đầy đủ:
+
+```powershell
+python run_phase3.py --enum data/samples/enum_lab_full.json --out reports/scan-001
+```
+
+Ví dụ với artifact Metasploitable3 trong local lab:
 
 ```powershell
 python run_phase3.py --enum data/samples/enum_metasploitable3_ub1404.json --out reports/metasploitable3-demo
 ```
 
-Bat NVD live mode va cung cap API key tren PowerShell:
-
-```powershell
-$env:NVD_API_KEY="your-nvd-api-key"
-python run_phase3.py --enum data/samples/enum_metasploitable3_ub1404.json --out reports/metasploitable3-demo
-```
-
-Hoac dat API key trong file `.env` o root project:
-
-```dotenv
-NVD_API_KEY=your-nvd-api-key
-```
-
-Neu muon bat ro rang `nvd_live`, cap nhat `config.yaml`:
-
-```yaml
-cve_lookup:
-  source: "nvd_live"
-```
-
-Khong commit API key vao repo. `.env`, `.env.*` va `data/cache/nvd/` da duoc
-ignore. NVD live co rate limit; project uu tien dung cache va fallback de demo
-on dinh hon.
-
-Cai Nuclei OSS local tren Windows bang Go:
-
-```powershell
-go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
-```
-
-Neu o C: thieu dung luong, co the chuyen workspace cua Go sang `E:\` truoc khi cai:
-
-```powershell
-$env:GOPATH="E:\go"
-$env:GOBIN="E:\go\bin"
-$env:GOCACHE="E:\go-build"
-$env:GOTMPDIR="E:\go-tmp"
-New-Item -ItemType Directory -Force -Path $env:GOPATH,$env:GOBIN,$env:GOCACHE,$env:GOTMPDIR | Out-Null
-go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
-```
-
-Kiem tra binary va version:
-
-```powershell
-nuclei -version
-```
-
-Mac dinh `config.yaml` da bat Nuclei CLI cho authorized lab run:
-
-```yaml
-nuclei:
-  mode: "cli"
-  binary: "${NUCLEI_BINARY:-nuclei}"
-  severity: ["critical", "high"]
-  timeout_seconds: 900.0
-  use_mock_fallback: true
-```
-
-Dat binary trong `.env`:
-
-```dotenv
-NUCLEI_BINARY=E:\go\bin\nuclei.exe
-```
-
-Neu `NUCLEI_BINARY` khong duoc set, project se fallback ve gia tri mac dinh
-`nuclei`, tuc la tim binary trong `PATH`.
-
-Che do `mock` van duoc giu lai de demo offline:
-
-```yaml
-nuclei:
-  mode: "mock"
-```
-
-Che do `auto` van duoc giu nguyen de uu tien CLI va fallback mock khi binary/thiet lap
-chua san sang:
-
-```yaml
-nuclei:
-  mode: "auto"
-  use_mock_fallback: true
-```
-
-Manual CLI test cho lab Metasploitable3:
-
-```powershell
-nuclei -list E:\Metasploitable3-Lab\enum\nuclei-targets.txt -severity critical,high -jsonl -stats -no-interactsh -exclude-tags dos,brute-force,intrusive -duc -o E:\Metasploitable3-Lab\enum\nuclei-results.jsonl
-```
-
-Khi project chay `mode: "cli"`, subprocess se dung cung nhom option an toan:
-
-- `-list <targets-file>`
-- `-severity critical,high`
-- `-jsonl`
-- `-no-interactsh`
-- `-exclude-tags dos,brute-force,intrusive`
-- `-duc`
-- `-o <jsonl-output>`
-
-Nuclei CLI co the chay kha lau tren full template set, va hoan toan co the tra
-`0` finding neu khong co template `critical/high` nao match. Day la ket qua hop
-le, khong phai loi. Report se ghi ro `Nuclei CLI completed with 0 critical/high matches`.
-
-Neu `mode: "cli"` nhung binary loi, timeout, hoac runtime error, agent co the
-fallback sang mock khi `use_mock_fallback: true`. Neu muon fail ngay thay vi
-fallback, dat:
-
-```yaml
-nuclei:
-  mode: "cli"
-  use_mock_fallback: false
-```
-
-Neu agent dang dung `mock` hoac fallback mock thi report se ghi ro day la
-offline fixture/fallback, khong nham voi CLI ket qua that.
-
-Ba sample tap trung de kiem tra tuong thich va OS assessment:
-
-```powershell
-python run_phase3.py --enum data/samples/enum_lab_no_os.json --out outputs/test_no_os
-python run_phase3.py --enum data/samples/enum_lab_linux_os.json --out outputs/test_linux_os
-python run_phase3.py --enum data/samples/enum_lab_windows_os.json --out outputs/test_windows_os
-python run_phase3.py --enum data/samples/enum_lab_full.json --out outputs/test_full
-```
-
-`enum_lab_full.json` la demo artifact day du tu Phase 1 + Phase 2, gom nhieu
-host private lab, OS fingerprint, open ports, service/product/version, URL,
-vhost, CPE, technologies, discovered paths, API endpoints, nguon enumeration,
-confidence va banner. Phase 3 chi tieu thu artifact nay; khong tu thuc hien
-reconnaissance, DNS enumeration, dirbust hoac port scanning.
-
-Chay theo format Pi/MVP:
+Ví dụ với input theo workflow Pi:
 
 ```powershell
 python run_phase3.py --enum data/pi/enum.json --out reports/pi-phase3
 ```
 
-Moi lan chay pipeline tao artifact tai thu muc `--out` va dong thoi ghi ket qua
-that cua pipeline vao cac thu muc runtime o root project:
+Có thể chỉ định file cấu hình khác khi cần:
 
-- `reports/<scan>/vuln.json`: findings da merge va risk-ranked.
-- `reports/<scan>/report.md`: bao cao Markdown cuoi.
-- `triage/vuln.json`: ban sao JSON de phuc vu triage/workflow.
-- `triage/cve_candidates.json`: ket qua that cua CVE Lookup Agent.
-- `triage/nuclei_results.json`: ket qua cua Nuclei Agent. O che do demo
-  an toan mac dinh, agent dung offline mock fixture/cache trong repo; real
-  Nuclei chi chay khi duoc bat ro rang va van phai qua scope guard.
-- `logs/pipeline.log`: trang thai va loi cua cac agent.
+```powershell
+python run_phase3.py --enum data/samples/enum_lab.json --out reports/scan-001 --config config.yaml
+```
 
-Lenh sample thuong cung tao `reports/<scan>/vuln.json`,
-`reports/<scan>/report.md` va `logs/<scan>.log`, sau do in summary bang
-Rich.
+## Input và output
 
-Input mau nam tai `data/samples/enum_lab.json`. Truoc khi bo sung bat ky scanner
-nao, hay validate target theo allowlist trong `config.yaml` va dung ngay neu
-target la public IP hoac khong co uy quyen.
+Input `enum.json` phải tuân theo Pydantic schema trong `app/schemas/`. Dữ liệu
+có thể gồm host, IP, OS fingerprint, port, protocol, service, product,
+version, CPE, URL, vhost, technology, discovered path và API endpoint.
 
-Moi host trong `enum.json` co the co object `os` tuy chon voi name, version,
-kernel, build, architecture, patch level, confidence va source. Phase 3 chi
-dung fingerprint OS nay de lookup vulnerability candidate offline va bao cao
-rui ro; project khong tu fingerprint OS, khong exploit va khong mo rong scope.
+Sau một lần chạy thành công với `--out reports/scan-001`, các artifact chính
+gồm:
 
-- Service-level findings duoc xac dinh tu service, product va version.
-- OS-level findings duoc xac dinh tu OS name, version, kernel va build.
-- Nuclei/template findings duoc danh dau `source_type: web-template`.
-- `cve-lookup-agent` dua CPE vao evidence khi Phase 1/2 cung cap.
-- `nuclei-agent` dung URL da validate cung vhost, discovered paths, API
-  endpoints va technologies trong offline safe fixture; khong tu discover
-  target moi.
-- Phase 3 chi nhan dien, merge va xep hang vulnerability candidates; khong khai
-  thac vulnerability.
+```text
+reports/scan-001/vuln.json       # Finding đã merge và xếp hạng
+reports/scan-001/report.md       # Báo cáo Markdown
+triage/vuln.json                 # Bản JSON kết quả mới nhất
+triage/cve_candidates.json       # Kết quả từ CVE lookup agent
+triage/nuclei_results.json       # Kết quả từ Nuclei agent
+logs/scan-001.log                # Log của lần chạy
+logs/pipeline.log                # Log pipeline mới nhất
+```
 
-Moi enumeration input phai duoc kiem tra bang `ScopeGuard.validate_enum` truoc
-khi agent scan chay. Guard doc `safety.allowed_cidrs` va `block_public_ip` tu
-`config.yaml`, dong thoi chan IP public, IP ngoai allowlist va hostname resolve
-ra dia chi khong duoc phep.
+Theo quy ước hiện tại, JSON phục vụ triage nằm trong `triage/` hoặc vị trí
+được cấu hình cho pipeline; báo cáo Markdown nằm trong thư mục `reports/` được
+truyền qua `--out`; log thực thi nằm trong `logs/`.
 
-`CveLookupAgent` ho tro ba mode: `mock`, `nvd_live`, va `auto`. O che do
-`mock`, agent dung `data/cve_mock_db.json` de demo an toan. O che do
-`nvd_live`, agent goi NVD CVE API 2.0, doc `NVD_API_KEY` tu environment, ton
-trong rate limit, va luu cache tai `data/cache/nvd/`. O che do `auto`, agent
-uu tien NVD live khi co API key va fallback sang cache/mock khi can. Agent
-lookup theo service/product/version/CPE va chi giu cac match co CVSS tu `7.0`
-tro len.
+`vuln.json` chứa summary và danh sách finding đã chuẩn hóa. Mỗi finding có
+thể bao gồm CVE/template ID, host, port, source agent, source type, CVSS,
+confidence, evidence, remediation và risk score.
 
-`NucleiAgent` ho tro ba mode: `mock`, `cli`, va `auto`. O che do `mock`, agent
-doc fixture web-template tu `data/nuclei_mock_db.json` de demo on dinh. O che
-do `cli`, agent goi Nuclei OSS local, chi scan URL da qua scope guard, dung
-`-list`, `-jsonl`, `-no-interactsh`, loai tru tag
-`dos,brute-force,intrusive`, va chi giu severity `critical,high`. O che do
-`auto`, agent uu tien Nuclei CLI va fallback sang mock khi binary, template,
-timeout hoac loi runtime xay ra. Agent khong dung ProjectDiscovery Cloud API va
-khong tu discover target moi.
+## Lưu ý an toàn và phạm vi được phép
 
-Pipeline deduplicate finding theo `host`, `port`, `cve_id`, `title` va
-`source_type`, dong thoi merge `source_agents` va evidence. Risk score duoc tinh theo
-`cvss * 10 * confidence`, cong them `5` khi co Nuclei confirmation va gioi han
-toi da `100`. Report Markdown gom Executive Summary, Scope, Findings by
-Severity, Technical Details, Remediation va Appendix.
+- Chỉ chạy project trong local lab, CTF hoặc hệ thống có ủy quyền rõ ràng.
+- Chỉ sử dụng localhost, private network hoặc authorized scope đã cấu hình.
+- Không scan public target hoặc Internet công cộng.
+- Không tự thêm target mới từ kết quả phát hiện.
+- Không thực hiện exploit.
+- Không brute force.
+- Không DoS, stress test hoặc resource exhaustion.
+- Không tự động chạy intrusive scanner template.
+- Luôn kiểm tra `config.yaml` và phạm vi được phê duyệt trước khi chạy.
 
-Orchestrator chay cac agent doc lap bang `asyncio.gather` voi semaphore gioi
-han boi `scanner.max_concurrency`. Log JSONL ghi `agent_timing.started_at`,
-`ended_at` va `duration_seconds` cho tung agent de chung minh cac agent co the
-overlap thoi gian chay.
-
-Severity trong `vuln.json` duoc chuan hoa theo CVSS: `critical` tu 9.0,
-`high` tu 7.0, `medium` tu 4.0, `low` tren 0 va `info` tai 0. Moi finding co
-`finding_id` xac dinh theo CVE/template, host, port hoac OS, va source type.
-Full demo dung fixture web-template offline an toan; real Nuclei van bi tat mac
-dinh.
-
-## Luu y uy quyen
-
-Chi su dung project trong local lab, CTF, hoac he thong co van ban uy quyen.
-Nguoi van hanh chiu trach nhiem xac minh pham vi va phe duyet truoc khi scan.
-Project khong scan public Internet va khong tu mo rong pham vi target.
-Project khong exploit, brute force, DoS hoac chay intrusive scan.
+Người vận hành chịu trách nhiệm xác nhận quyền kiểm thử và phạm vi mục tiêu.
+Scope guard là lớp bảo vệ kỹ thuật, không thay thế cho sự cho phép hợp pháp.
