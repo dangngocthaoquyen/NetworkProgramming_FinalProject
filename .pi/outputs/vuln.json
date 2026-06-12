@@ -1,19 +1,19 @@
 {
-  "scan_id": "COURSE-LAB-FULL-001",
+  "scan_id": "COURSE-LAB-001",
   "summary": {
-    "total": 7,
+    "total": 4,
     "critical": 0,
-    "high": 7,
+    "high": 4,
     "medium": 0,
     "low": 0,
     "info": 0
   },
   "findings": [
     {
-      "finding_id": "CVE-2099-1001-192.168.56.21-os-os",
+      "finding_id": "CVE-2099-1001-192.168.56.10-os-os",
       "cve_id": "CVE-2099-1001",
       "title": "CVE-2099-1001: Mock Ubuntu kernel vulnerability candidate",
-      "host": "192.168.56.21",
+      "host": "192.168.56.10",
       "port": null,
       "source_agents": [
         "cve_lookup_agent"
@@ -22,15 +22,15 @@
       "severity": "high",
       "cvss": 8.4,
       "confidence": 0.874,
-      "evidence": "Offline mock DB matched OS fingerprint on 192.168.56.21: name=Ubuntu, version=22.04, kernel=5.15.0, build=unknown using exact match. Enumerated OS CPE: cpe:/o:canonical:ubuntu_linux:22.04.",
+      "evidence": "Offline mock DB matched OS fingerprint on 192.168.56.10: name=Ubuntu, version=22.04, kernel=5.15.0, build=unknown using exact match.",
       "remediation": "Review Ubuntu security notices and apply the approved kernel update.",
       "risk_score": 73.42
     },
     {
-      "finding_id": "CVE-2021-41773-192.168.56.21-8080-service",
+      "finding_id": "CVE-2021-41773-192.168.56.10-8080-service",
       "cve_id": "CVE-2021-41773",
       "title": "CVE-2021-41773: Apache HTTP Server path traversal",
-      "host": "192.168.56.21",
+      "host": "192.168.56.10",
       "port": 8080,
       "source_agents": [
         "cve_lookup_agent"
@@ -39,15 +39,15 @@
       "severity": "high",
       "cvss": 7.5,
       "confidence": 0.95,
-      "evidence": "Offline mock DB matched Apache httpd 2.4.49 on 192.168.56.21:8080/tcp using exact match. Enumerated CPE: cpe:/a:apache:http_server:2.4.49.",
+      "evidence": "Offline mock DB matched Apache httpd 2.4.49 on 192.168.56.10:8080/tcp using exact match.",
       "remediation": "Upgrade Apache HTTP Server to a supported patched release.",
       "risk_score": 71.25
     },
     {
-      "finding_id": "CVE-2099-1002-192.168.56.22-os-os",
+      "finding_id": "CVE-2099-1002-192.168.56.11-os-os",
       "cve_id": "CVE-2099-1002",
       "title": "CVE-2099-1002: Mock Windows 10 build vulnerability candidate",
-      "host": "192.168.56.22",
+      "host": "192.168.56.11",
       "port": null,
       "source_agents": [
         "cve_lookup_agent"
@@ -56,15 +56,15 @@
       "severity": "high",
       "cvss": 7.8,
       "confidence": 0.836,
-      "evidence": "Offline mock DB matched OS fingerprint on 192.168.56.22: name=Windows, version=10, kernel=unknown, build=19045 using exact match. Enumerated OS CPE: cpe:/o:microsoft:windows_10:22h2.",
+      "evidence": "Offline mock DB matched OS fingerprint on 192.168.56.11: name=Windows 10, version=22H2, kernel=unknown, build=19045 using exact match.",
       "remediation": "Review Microsoft security guidance and apply approved cumulative updates.",
       "risk_score": 65.21
     },
     {
-      "finding_id": "CVE-2099-0001-192.168.56.21-80-service",
+      "finding_id": "CVE-2099-0001-192.168.56.10-80-service",
       "cve_id": "CVE-2099-0001",
       "title": "CVE-2099-0001: Mock nginx old-version finding",
-      "host": "192.168.56.21",
+      "host": "192.168.56.10",
       "port": 80,
       "source_agents": [
         "cve_lookup_agent"
@@ -73,60 +73,9 @@
       "severity": "high",
       "cvss": 8.1,
       "confidence": 0.8,
-      "evidence": "Offline mock DB matched nginx 1.18.0 on 192.168.56.21:80/tcp using range match. Enumerated CPE: cpe:/a:nginx:nginx:1.18.0.",
+      "evidence": "Offline mock DB matched nginx 1.18.0 on 192.168.56.10:80/tcp using range match.",
       "remediation": "Upgrade nginx to a supported release after compatibility testing.",
       "risk_score": 64.8
-    },
-    {
-      "finding_id": "CVE-2099-0001-192.168.56.23-443-service",
-      "cve_id": "CVE-2099-0001",
-      "title": "CVE-2099-0001: Mock nginx old-version finding",
-      "host": "192.168.56.23",
-      "port": 443,
-      "source_agents": [
-        "cve_lookup_agent"
-      ],
-      "source_type": "service",
-      "severity": "high",
-      "cvss": 8.1,
-      "confidence": 0.8,
-      "evidence": "Offline mock DB matched nginx 1.18.0 on 192.168.56.23:443/tcp using range match. Enumerated CPE: cpe:/a:nginx:nginx:1.18.0.",
-      "remediation": "Upgrade nginx to a supported release after compatibility testing.",
-      "risk_score": 64.8
-    },
-    {
-      "finding_id": "CVE-2099-0001-192.168.56.23-80-service",
-      "cve_id": "CVE-2099-0001",
-      "title": "CVE-2099-0001: Mock nginx old-version finding",
-      "host": "192.168.56.23",
-      "port": 80,
-      "source_agents": [
-        "cve_lookup_agent"
-      ],
-      "source_type": "service",
-      "severity": "high",
-      "cvss": 8.1,
-      "confidence": 0.8,
-      "evidence": "Offline mock DB matched nginx 1.18.0 on 192.168.56.23:80/tcp using range match. Enumerated CPE: cpe:/a:nginx:nginx:1.18.0.",
-      "remediation": "Upgrade nginx to a supported release after compatibility testing.",
-      "risk_score": 64.8
-    },
-    {
-      "finding_id": "safe-lab-security-headers-192.168.56.23-80-web-template",
-      "cve_id": null,
-      "title": "High-risk exposed administrative interface",
-      "host": "192.168.56.23",
-      "port": 80,
-      "source_agents": [
-        "nuclei_agent"
-      ],
-      "source_type": "web-template",
-      "severity": "high",
-      "cvss": 7.0,
-      "confidence": 0.8,
-      "evidence": "Offline safe template fixture matched the authorized web-lab URL. Matched context: url=http://192.168.56.23/, path=/admin, vhost=app.web-lab.local.",
-      "remediation": "Restrict administrative paths to trusted networks and require strong authentication.",
-      "risk_score": 61.0
     }
   ]
 }
