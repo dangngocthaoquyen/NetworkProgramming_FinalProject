@@ -12,7 +12,8 @@ tao bao cao. Project khong trien khai lai Phase 1 hoac Phase 2.
   `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`.
 - Public IP bi chan mac dinh.
 - `max_concurrency` duoc gioi han o `5`.
-- Nuclei bi tat mac dinh.
+- Nuclei mac dinh chay `cli` mode cho lab run, nhung van giu `mock` mode de demo offline/fallback.
+- CVE lookup co the chay `mock`, `nvd_live`, hoac `auto` voi cache NVD.
 - Project khong thuc hien exploit, brute force, DoS hoac scan Internet public.
 
 ## Cau truc
@@ -50,6 +51,128 @@ Chay Phase 3 voi sample lab:
 ```powershell
 python run_phase3.py --enum data/samples/enum_lab.json --out reports/scan-001
 ```
+
+Chay demo voi sample duoc import tu Nmap XML cua Metasploitable3 Ubuntu:
+
+```powershell
+python run_phase3.py --enum data/samples/enum_metasploitable3_ub1404.json --out reports/metasploitable3-demo
+```
+
+Bat NVD live mode va cung cap API key tren PowerShell:
+
+```powershell
+$env:NVD_API_KEY="your-nvd-api-key"
+python run_phase3.py --enum data/samples/enum_metasploitable3_ub1404.json --out reports/metasploitable3-demo
+```
+
+Hoac dat API key trong file `.env` o root project:
+
+```dotenv
+NVD_API_KEY=your-nvd-api-key
+```
+
+Neu muon bat ro rang `nvd_live`, cap nhat `config.yaml`:
+
+```yaml
+cve_lookup:
+  source: "nvd_live"
+```
+
+Khong commit API key vao repo. `.env`, `.env.*` va `data/cache/nvd/` da duoc
+ignore. NVD live co rate limit; project uu tien dung cache va fallback de demo
+on dinh hon.
+
+Cai Nuclei OSS local tren Windows bang Go:
+
+```powershell
+go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
+```
+
+Neu o C: thieu dung luong, co the chuyen workspace cua Go sang `E:\` truoc khi cai:
+
+```powershell
+$env:GOPATH="E:\go"
+$env:GOBIN="E:\go\bin"
+$env:GOCACHE="E:\go-build"
+$env:GOTMPDIR="E:\go-tmp"
+New-Item -ItemType Directory -Force -Path $env:GOPATH,$env:GOBIN,$env:GOCACHE,$env:GOTMPDIR | Out-Null
+go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
+```
+
+Kiem tra binary va version:
+
+```powershell
+nuclei -version
+```
+
+Mac dinh `config.yaml` da bat Nuclei CLI cho authorized lab run:
+
+```yaml
+nuclei:
+  mode: "cli"
+  binary: "${NUCLEI_BINARY:-nuclei}"
+  severity: ["critical", "high"]
+  timeout_seconds: 900.0
+  use_mock_fallback: true
+```
+
+Dat binary trong `.env`:
+
+```dotenv
+NUCLEI_BINARY=E:\go\bin\nuclei.exe
+```
+
+Neu `NUCLEI_BINARY` khong duoc set, project se fallback ve gia tri mac dinh
+`nuclei`, tuc la tim binary trong `PATH`.
+
+Che do `mock` van duoc giu lai de demo offline:
+
+```yaml
+nuclei:
+  mode: "mock"
+```
+
+Che do `auto` van duoc giu nguyen de uu tien CLI va fallback mock khi binary/thiet lap
+chua san sang:
+
+```yaml
+nuclei:
+  mode: "auto"
+  use_mock_fallback: true
+```
+
+Manual CLI test cho lab Metasploitable3:
+
+```powershell
+nuclei -list E:\Metasploitable3-Lab\enum\nuclei-targets.txt -severity critical,high -jsonl -stats -no-interactsh -exclude-tags dos,brute-force,intrusive -duc -o E:\Metasploitable3-Lab\enum\nuclei-results.jsonl
+```
+
+Khi project chay `mode: "cli"`, subprocess se dung cung nhom option an toan:
+
+- `-list <targets-file>`
+- `-severity critical,high`
+- `-jsonl`
+- `-no-interactsh`
+- `-exclude-tags dos,brute-force,intrusive`
+- `-duc`
+- `-o <jsonl-output>`
+
+Nuclei CLI co the chay kha lau tren full template set, va hoan toan co the tra
+`0` finding neu khong co template `critical/high` nao match. Day la ket qua hop
+le, khong phai loi. Report se ghi ro `Nuclei CLI completed with 0 critical/high matches`.
+
+Neu `mode: "cli"` nhung binary loi, timeout, hoac runtime error, agent co the
+fallback sang mock khi `use_mock_fallback: true`. Neu muon fail ngay thay vi
+fallback, dat:
+
+```yaml
+nuclei:
+  mode: "cli"
+  use_mock_fallback: false
+```
+
+Neu agent dang dung `mock` hoac fallback mock thi report se ghi ro day la
+offline fixture/fallback, khong nham voi CLI ket qua that.
 
 Ba sample tap trung de kiem tra tuong thich va OS assessment:
 
@@ -112,20 +235,22 @@ khi agent scan chay. Guard doc `safety.allowed_cidrs` va `block_public_ip` tu
 `config.yaml`, dong thoi chan IP public, IP ngoai allowlist va hostname resolve
 ra dia chi khong duoc phep.
 
-`CveLookupAgent` hien la offline CVE adapter dung `data/cve_mock_db.json` de
-demo an toan, khong goi API Internet. Agent lookup theo service/product/version
-va OS fingerprint, chi tra ve cac match co CVSS tu `7.0` tro len va gan
-confidence theo muc do khop. Extension tiep theo nen them NVD/OSV client co
-cache offline va timeout, nhung khong bat buoc cho demo local an toan.
+`CveLookupAgent` ho tro ba mode: `mock`, `nvd_live`, va `auto`. O che do
+`mock`, agent dung `data/cve_mock_db.json` de demo an toan. O che do
+`nvd_live`, agent goi NVD CVE API 2.0, doc `NVD_API_KEY` tu environment, ton
+trong rate limit, va luu cache tai `data/cache/nvd/`. O che do `auto`, agent
+uu tien NVD live khi co API key va fallback sang cache/mock khi can. Agent
+lookup theo service/product/version/CPE va chi giu cac match co CVSS tu `7.0`
+tro len.
 
-`NucleiAgent` mac dinh khong chay real scanner vi `enable_nuclei: false`.
-Demo offline safe mode co the tra ve fixture web-template tu
-`data/nuclei_mock_db.json` khi `enable_nuclei_mock: true`. Ca mock mode va real
-mode chi chap nhan severity `critical,high`; `medium`, `low` va `info` bi loai
-de dung Topic 06. Khi real mode duoc bat ro rang, agent chi chay URL da qua
-scope guard, dung `-no-interactsh`, loai tru tag `dos,brute-force,intrusive`,
-va khong tu discover target moi. Loi binary, subprocess hoac timeout duoc tra
-ve trong `AgentResult` thay vi lam crash pipeline.
+`NucleiAgent` ho tro ba mode: `mock`, `cli`, va `auto`. O che do `mock`, agent
+doc fixture web-template tu `data/nuclei_mock_db.json` de demo on dinh. O che
+do `cli`, agent goi Nuclei OSS local, chi scan URL da qua scope guard, dung
+`-list`, `-jsonl`, `-no-interactsh`, loai tru tag
+`dos,brute-force,intrusive`, va chi giu severity `critical,high`. O che do
+`auto`, agent uu tien Nuclei CLI va fallback sang mock khi binary, template,
+timeout hoac loi runtime xay ra. Agent khong dung ProjectDiscovery Cloud API va
+khong tu discover target moi.
 
 Pipeline deduplicate finding theo `host`, `port`, `cve_id`, `title` va
 `source_type`, dong thoi merge `source_agents` va evidence. Risk score duoc tinh theo

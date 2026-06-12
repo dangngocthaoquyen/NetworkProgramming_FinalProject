@@ -1,0 +1,184 @@
+{
+  "scan_id": "METASPLOITABLE3-UB1404-NMAP-001",
+  "target": "172.28.128.3",
+  "scope": "authorized local lab only",
+  "generated_by": "nmap -sV -sC XML import (pre-collected enumeration artifact)",
+  "hosts": [
+    {
+      "ip": "172.28.128.3",
+      "hostname": "metasploitable3-ub1404",
+      "ports": [
+        {
+          "port": 21,
+          "protocol": "tcp",
+          "service": "ftp",
+          "product": "ProFTPD",
+          "version": "1.3.5",
+          "state": "open",
+          "source": "nmap-service-detection",
+          "banner": "ProFTPD 1.3.5",
+          "cpe": [
+            "cpe:/a:proftpd:proftpd:1.3.5"
+          ]
+        },
+        {
+          "port": 22,
+          "protocol": "tcp",
+          "service": "ssh",
+          "product": "OpenSSH",
+          "version": "6.6.1p1 Ubuntu 2ubuntu2.13",
+          "state": "open",
+          "source": "nmap-service-detection",
+          "banner": "OpenSSH 6.6.1p1 Ubuntu 2ubuntu2.13 (Ubuntu Linux; protocol 2.0); ssh-hostkey script returned DSA, RSA, ECDSA, and ED25519 host keys.",
+          "cpe": [
+            "cpe:/a:openbsd:openssh:6.6.1p1",
+            "cpe:/o:linux:linux_kernel"
+          ]
+        },
+        {
+          "port": 80,
+          "protocol": "tcp",
+          "service": "http",
+          "product": "Apache httpd",
+          "version": "2.4.7",
+          "url": "http://172.28.128.3/",
+          "state": "open",
+          "source": "nmap-service-detection",
+          "banner": "Apache/2.4.7 (Ubuntu); title: Index of /; http-ls exposed chat/, drupal/, payroll_app.php, and phpmyadmin/.",
+          "vhost": "127.0.1.1",
+          "cpe": [
+            "cpe:/a:apache:http_server:2.4.7"
+          ],
+          "technologies": [
+            "Apache httpd"
+          ],
+          "discovered_paths": [
+            "/chat/",
+            "/drupal/",
+            "/payroll_app.php",
+            "/phpmyadmin/"
+          ],
+          "api_endpoints": []
+        },
+        {
+          "port": 445,
+          "protocol": "tcp",
+          "service": "netbios-ssn",
+          "product": "Samba smbd",
+          "version": "4.3.11-Ubuntu",
+          "state": "open",
+          "source": "nmap-service-detection",
+          "banner": "Samba smbd 4.3.11-Ubuntu; smb-security-mode reported message_signing: disabled (dangerous, but default); smb2-security-mode reported Message signing enabled but not required.",
+          "cpe": [
+            "cpe:/a:samba:samba"
+          ]
+        },
+        {
+          "port": 631,
+          "protocol": "tcp",
+          "service": "ipp",
+          "product": "CUPS",
+          "version": "1.7",
+          "url": "http://172.28.128.3:631/",
+          "state": "open",
+          "source": "nmap-service-detection",
+          "banner": "CUPS/1.7 IPP/2.1; title: Home - CUPS 1.7.2; http-methods reported Potentially risky methods: PUT; robots.txt disallowed /.",
+          "cpe": [
+            "cpe:/a:apple:cups:1.7"
+          ],
+          "technologies": [
+            "CUPS"
+          ]
+        },
+        {
+          "port": 3306,
+          "protocol": "tcp",
+          "service": "mysql",
+          "product": "MySQL",
+          "state": "open",
+          "source": "nmap-service-detection",
+          "banner": "MySQL service detected; Nmap reported unauthorized.",
+          "cpe": [
+            "cpe:/a:mysql:mysql"
+          ]
+        },
+        {
+          "port": 8080,
+          "protocol": "tcp",
+          "service": "http",
+          "product": "Jetty",
+          "version": "8.1.7.v20120910",
+          "url": "http://172.28.128.3:8080/",
+          "state": "open",
+          "source": "nmap-service-detection",
+          "banner": "Jetty(8.1.7.v20120910); title: Error 404 - Not Found.",
+          "cpe": [
+            "cpe:/a:mortbay:jetty:8.1.7.v20120910"
+          ],
+          "technologies": [
+            "Jetty 8.1.7.v20120910"
+          ],
+          "discovered_paths": [
+            "/"
+          ],
+          "api_endpoints": []
+        }
+      ],
+      "web": [
+        {
+          "url": "http://172.28.128.3/",
+          "port": 80,
+          "service": "http",
+          "product": "Apache httpd",
+          "version": "2.4.7",
+          "title": "Index of /",
+          "banner": "Apache/2.4.7 (Ubuntu)",
+          "vhost": "127.0.1.1",
+          "source": "nmap-service-detection",
+          "technologies": [
+            "Apache httpd"
+          ],
+          "interesting_paths": [
+            "/chat/",
+            "/drupal/",
+            "/payroll_app.php",
+            "/phpmyadmin/"
+          ],
+          "api_endpoints": []
+        },
+        {
+          "url": "http://172.28.128.3:631/",
+          "port": 631,
+          "service": "ipp",
+          "product": "CUPS",
+          "version": "1.7",
+          "title": "Home - CUPS 1.7.2",
+          "banner": "CUPS/1.7 IPP/2.1",
+          "source": "nmap-service-detection",
+          "technologies": [
+            "CUPS"
+          ],
+          "interesting_paths": [],
+          "api_endpoints": []
+        },
+        {
+          "url": "http://172.28.128.3:8080/",
+          "port": 8080,
+          "service": "http",
+          "product": "Jetty",
+          "version": "8.1.7.v20120910",
+          "title": "Error 404 - Not Found",
+          "banner": "Jetty(8.1.7.v20120910)",
+          "source": "nmap-service-detection",
+          "technologies": [
+            "Jetty 8.1.7.v20120910"
+          ],
+          "interesting_paths": [
+            "/"
+          ],
+          "api_endpoints": []
+        }
+      ]
+    }
+  ]
+}
