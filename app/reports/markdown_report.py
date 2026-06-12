@@ -149,6 +149,7 @@ def render_markdown_report(
                 f"### {finding.title}",
                 "",
                 f"- CVE ID: {finding.cve_id or finding.finding_id}",
+                f"- Aliases: {', '.join(finding.aliases) or 'N/A'}",
                 f"- Template ID: {finding.template_id or 'N/A'}",
                 f"- Host: {finding.host or 'N/A'}",
                 f"- Port: {finding.port or 'N/A'}",
@@ -160,6 +161,7 @@ def render_markdown_report(
                 f"- Risk score: {finding.risk_score:.2f}",
                 f"- Source type: {finding.source_type.value}",
                 f"- Source agents: {', '.join(finding.source_agents) or 'N/A'}",
+                f"- Intel sources: {', '.join(finding.intel_sources) or 'N/A'}",
                 f"- Evidence: {finding.evidence}",
                 f"- References: {', '.join(finding.references) or 'N/A'}",
                 "",
@@ -184,8 +186,9 @@ def render_markdown_report(
             "",
             "### Methodology",
             "",
-            "Findings were deduplicated by host, port, CVE ID, title, and "
-            "source type. Severity was normalized from standard CVSS ranges. "
+            "Findings were deduplicated by host, port, source type, and the "
+            "best available vulnerability identifier, including CVE aliases when present. "
+            "Severity was normalized from standard CVSS ranges. "
             "Risk scores were calculated from CVSS and confidence, with a "
             "capped bonus for Nuclei confirmation.",
         ]

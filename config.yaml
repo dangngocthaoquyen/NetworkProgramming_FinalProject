@@ -29,3 +29,17 @@ cve_lookup:
     use_cache: true
     timeout_seconds: 20.0
     allow_range_matches: false
+  osv:
+    enabled: true
+    base_url: "https://api.osv.dev/v1"
+    cache_dir: "data/cache/osv"
+    use_cache: true
+    timeout_seconds: 15.0
+    max_batch_size: 20
+    max_retries: 2
+    enabled_for_package_ecosystems:
+      - "Debian"
+      - "Ubuntu"
+      - "PyPI"
+      - "npm"
+    package_mappings: []

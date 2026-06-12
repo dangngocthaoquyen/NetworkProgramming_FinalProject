@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
+import re
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
-import re
 
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
@@ -26,10 +27,20 @@ from app.tools.nvd_client import (
     normalize_cpe23,
     references_from_nvd,
 )
+from app.tools.osv_client import (
+    OsvClient,
+    OsvClientError,
+    aliases_from_osv,
+    extract_cvss_from_osv,
+    preferred_cve_from_osv,
+    references_from_osv,
+    summary_from_osv,
+)
 
 
 DEFAULT_CVE_DB_PATH = Path(__file__).resolve().parents[2] / "data" / "cve_mock_db.json"
 DEFAULT_CONFIG_PATH = Path("config.yaml")
+LOGGER = logging.getLogger(__name__)
 
 
 class MatchType(StrEnum):
@@ -78,6 +89,51 @@ class CveMockDatabase(BaseModel):
     records: list[CveRecord]
 
 
+class OsvPackageMapping(BaseModel):
+    """Explicit service-to-package mapping used for cautious OSV lookups."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    product: str | None = Field(default=None, min_length=1)
+    service: str | None = Field(default=None, min_length=1)
+    cpe_prefix: str | None = Field(default=None, min_length=1)
+    ecosystem: str = Field(min_length=1)
+    package: str = Field(min_length=1)
+    notes: str | None = None
+
+    @model_validator(mode="after")
+    def validate_selector(self) -> OsvPackageMapping:
+        if not any((self.product, self.service, self.cpe_prefix)):
+            raise ValueError(
+                "OSV package mappings require product, service, or cpe_prefix matching"
+            )
+        return self
+
+
+class ResolvedOsvQuery(BaseModel):
+    """A validated OSV query resolved from an explicit config mapping."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    host_ip: str = Field(min_length=1)
+    port: int = Field(ge=1, le=65535)
+    protocol: str = Field(min_length=1)
+    product: str = Field(min_length=1)
+    version: str = Field(min_length=1)
+    ecosystem: str = Field(min_length=1)
+    package: str = Field(min_length=1)
+    notes: str | None = None
+
+    def query_payload(self) -> dict[str, Any]:
+        return {
+            "package": {
+                "ecosystem": self.ecosystem,
+                "name": self.package,
+            },
+            "version": self.version,
+        }
+
+
 class CveLookupAgent:
     """Match enumerated products against mock or live CVE intelligence."""
 
@@ -89,10 +145,12 @@ class CveLookupAgent:
         *,
         config_path: str | Path = DEFAULT_CONFIG_PATH,
         nvd_client: NvdClient | None = None,
+        osv_client: OsvClient | None = None,
     ) -> None:
         self.db_path = Path(db_path)
         self.config_path = Path(config_path)
         self._nvd_client = nvd_client
+        self._osv_client = osv_client
 
     def lookup(self, enum_input: EnumInput) -> list[Finding]:
         """Return high-severity local CVE matches for a validated enum object."""
@@ -102,6 +160,8 @@ class CveLookupAgent:
 
         config = self._load_lookup_config()
         findings = self._service_findings(enum_input, config)
+        if config["source"] != "mock" and config["osv"]["enabled"]:
+            findings.extend(self._service_findings_from_osv(enum_input, config, findings))
         if config["source"] != "nvd_live":
             findings.extend(self._os_findings_from_mock(enum_input, config))
         return findings
@@ -146,10 +206,12 @@ class CveLookupAgent:
                         Finding(
                             finding_id=record.cve_id,
                             cve_id=record.cve_id,
+                            aliases=[],
                             title=f"{record.cve_id}: {record.title}",
                             host=str(host.ip),
                             port=port.port,
                             source_agents=[self.agent_name],
+                            intel_sources=["mock"],
                             source_type=SourceType.SERVICE,
                             match_method=f"mock-{record.match_type.value}",
                             severity=self._severity_for_cvss(record.cvss),
@@ -183,10 +245,12 @@ class CveLookupAgent:
                     Finding(
                         finding_id=record.cve_id,
                         cve_id=record.cve_id,
+                        aliases=[],
                         title=f"{record.cve_id}: {record.title}",
                         host=str(host.ip),
                         port=None,
                         source_agents=[self.agent_name],
+                        intel_sources=["mock"],
                         source_type=SourceType.OS,
                         match_method=f"mock-{record.match_type.value}",
                         severity=self._severity_for_cvss(record.cvss),
@@ -263,6 +327,56 @@ class CveLookupAgent:
             return findings
         return findings
 
+    def _service_findings_from_osv(
+        self,
+        enum_input: EnumInput,
+        config: dict[str, Any],
+        baseline_findings: list[Finding],
+    ) -> list[Finding]:
+        osv_config = config["osv"]
+        resolved_queries = self._resolve_osv_queries(enum_input, osv_config)
+        if not resolved_queries:
+            return []
+
+        client = self._osv(config)
+        findings: list[Finding] = []
+        nvd_by_cve = {
+            finding.cve_id.upper(): finding
+            for finding in baseline_findings
+            if finding.cve_id and "nvd" in finding.intel_sources
+        }
+
+        batch_size = int(osv_config["max_batch_size"])
+        for index in range(0, len(resolved_queries), batch_size):
+            chunk = resolved_queries[index : index + batch_size]
+            try:
+                results = client.query_batch([item.query_payload() for item in chunk])
+            except OsvClientError as exc:
+                LOGGER.debug("OSV querybatch failed for %d mapped services: %s", len(chunk), exc)
+                continue
+            if len(results) != len(chunk):
+                LOGGER.debug(
+                    "OSV querybatch returned %d results for %d queries; skipping the mismatched batch.",
+                    len(results),
+                    len(chunk),
+                )
+                continue
+
+            for resolved, result in zip(chunk, results, strict=True):
+                if not isinstance(result, dict):
+                    continue
+                findings.extend(
+                    self._osv_result_to_findings(
+                        resolved,
+                        result,
+                        client=client,
+                        minimum_cvss=float(config["min_cvss"]),
+                        nvd_by_cve=nvd_by_cve,
+                    )
+                )
+
+        return findings
+
     async def run(self, enum_input: EnumInput) -> AgentResult:
         """Run lookup without allowing agent errors to crash the pipeline."""
 
@@ -304,6 +418,13 @@ class CveLookupAgent:
         nvd = lookup.get("nvd", {})
         if not isinstance(nvd, dict):
             raise ValueError("cve_lookup.nvd must be a mapping")
+        osv = lookup.get("osv", {})
+        if not isinstance(osv, dict):
+            raise ValueError("cve_lookup.osv must be a mapping")
+
+        package_mappings = osv.get("package_mappings", [])
+        if not isinstance(package_mappings, list):
+            raise ValueError("cve_lookup.osv.package_mappings must be a list")
 
         return {
             "source": source,
@@ -313,6 +434,23 @@ class CveLookupAgent:
                 "use_cache": bool(nvd.get("use_cache", True)),
                 "timeout_seconds": float(nvd.get("timeout_seconds", 20.0)),
                 "allow_range_matches": bool(nvd.get("allow_range_matches", False)),
+            },
+            "osv": {
+                "enabled": bool(osv.get("enabled", False)),
+                "base_url": str(osv.get("base_url", "https://api.osv.dev/v1")),
+                "cache_dir": str(osv.get("cache_dir", "data/cache/osv")),
+                "use_cache": bool(osv.get("use_cache", True)),
+                "timeout_seconds": float(osv.get("timeout_seconds", 15.0)),
+                "max_batch_size": max(1, int(osv.get("max_batch_size", 20))),
+                "max_retries": max(0, int(osv.get("max_retries", 2))),
+                "enabled_for_package_ecosystems": [
+                    str(item)
+                    for item in osv.get("enabled_for_package_ecosystems", [])
+                    if str(item)
+                ],
+                "package_mappings": [
+                    OsvPackageMapping.model_validate(item) for item in package_mappings
+                ],
             },
         }
 
@@ -326,6 +464,19 @@ class CveLookupAgent:
             timeout_seconds=nvd["timeout_seconds"],
         )
         return self._nvd_client
+
+    def _osv(self, config: dict[str, Any]) -> OsvClient:
+        if self._osv_client is not None:
+            return self._osv_client
+        osv = config["osv"]
+        self._osv_client = OsvClient(
+            base_url=osv["base_url"],
+            cache_dir=osv["cache_dir"],
+            use_cache=osv["use_cache"],
+            timeout_seconds=osv["timeout_seconds"],
+            max_retries=osv["max_retries"],
+        )
+        return self._osv_client
 
     def _live_payload_for_port(
         self, client: NvdClient, port: Port
@@ -361,6 +512,182 @@ class CveLookupAgent:
         if payload is not None:
             return payload, 0.75, f"keywordSearch={keyword}"
         return None, 0.0, ""
+
+    def _resolve_osv_queries(
+        self,
+        enum_input: EnumInput,
+        osv_config: dict[str, Any],
+    ) -> list[ResolvedOsvQuery]:
+        mappings: list[OsvPackageMapping] = osv_config["package_mappings"]
+        if not mappings:
+            LOGGER.debug("OSV enabled but no package_mappings were configured; skipping OSV lookup.")
+            return []
+
+        enabled_ecosystems = {
+            value.casefold() for value in osv_config["enabled_for_package_ecosystems"]
+        }
+        resolved: list[ResolvedOsvQuery] = []
+
+        for host in enum_input.hosts:
+            for port in host.ports:
+                if not port.version:
+                    LOGGER.debug(
+                        "Skipping OSV lookup for %s:%s because the service has no version.",
+                        host.ip,
+                        port.port,
+                    )
+                    continue
+
+                matches = [
+                    mapping
+                    for mapping in mappings
+                    if self._mapping_matches_port(mapping, port)
+                    and (
+                        not enabled_ecosystems
+                        or mapping.ecosystem.casefold() in enabled_ecosystems
+                    )
+                ]
+                if not matches:
+                    LOGGER.debug(
+                        "Skipping OSV lookup for %s:%s %s because no explicit package mapping matched.",
+                        host.ip,
+                        port.port,
+                        port.product or port.service,
+                    )
+                    continue
+
+                for mapping in matches:
+                    resolved.append(
+                        ResolvedOsvQuery(
+                            host_ip=str(host.ip),
+                            port=port.port,
+                            protocol=port.protocol,
+                            product=port.product or port.service,
+                            version=port.version,
+                            ecosystem=mapping.ecosystem,
+                            package=mapping.package,
+                            notes=mapping.notes,
+                        )
+                    )
+        return resolved
+
+    @staticmethod
+    def _mapping_matches_port(mapping: OsvPackageMapping, port: Port) -> bool:
+        if mapping.product is not None:
+            product = port.product or port.service
+            if product.casefold() != mapping.product.casefold():
+                return False
+
+        if mapping.service is not None and port.service.casefold() != mapping.service.casefold():
+            return False
+
+        if mapping.cpe_prefix is not None:
+            prefix = mapping.cpe_prefix.casefold()
+            matched = any(
+                cpe.casefold().startswith(prefix)
+                or (
+                    (normalized := normalize_cpe23(cpe)) is not None
+                    and normalized.casefold().startswith(prefix)
+                )
+                for cpe in port.cpe
+            )
+            if not matched:
+                return False
+
+        return True
+
+    def _osv_result_to_findings(
+        self,
+        resolved: ResolvedOsvQuery,
+        result: dict[str, Any],
+        *,
+        client: OsvClient,
+        minimum_cvss: float,
+        nvd_by_cve: dict[str, Finding],
+    ) -> list[Finding]:
+        vulns = result.get("vulns", [])
+        if not isinstance(vulns, list):
+            return []
+
+        findings: list[Finding] = []
+        for vuln in vulns:
+            detailed_vuln = self._osv_detail_payload(vuln, client)
+            if detailed_vuln is None:
+                continue
+
+            osv_id = detailed_vuln.get("id")
+            if not isinstance(osv_id, str) or not osv_id:
+                continue
+
+            aliases = [alias for alias in aliases_from_osv(detailed_vuln) if alias != osv_id]
+            cve_alias = preferred_cve_from_osv(detailed_vuln)
+            osv_cvss = extract_cvss_from_osv(detailed_vuln)
+            related_nvd = nvd_by_cve.get(cve_alias.upper()) if cve_alias else None
+
+            if related_nvd is not None:
+                cvss = related_nvd.cvss
+                match_method = "osv-alias-enrichment"
+                confidence = 0.85
+                validation_required = True
+            else:
+                cvss = osv_cvss
+                match_method = "osv-package-version"
+                confidence = 0.70
+                validation_required = True
+
+            if cvss is None or cvss < minimum_cvss:
+                continue
+
+            primary_id = cve_alias or osv_id
+            references = references_from_osv(detailed_vuln)
+            findings.append(
+                Finding(
+                    finding_id=osv_id,
+                    cve_id=cve_alias,
+                    aliases=aliases,
+                    title=f"{primary_id}: {summary_from_osv(detailed_vuln)}",
+                    host=resolved.host_ip,
+                    port=resolved.port,
+                    source_agents=[self.agent_name],
+                    intel_sources=["osv"],
+                    source_type=SourceType.SERVICE,
+                    match_method=match_method,
+                    validation_required=validation_required,
+                    severity=self._severity_for_cvss(cvss),
+                    cvss=cvss,
+                    confidence=confidence,
+                    evidence=self._osv_evidence(resolved, osv_id, match_method),
+                    references=references,
+                    remediation=(
+                        "Treat this as package-level intelligence for manual validation, "
+                        "confirm the deployed package provenance on the authorized target, "
+                        "and apply the approved remediation if affected."
+                    ),
+                    risk_score=round(cvss * confidence, 2),
+                )
+            )
+
+        return findings
+
+    @staticmethod
+    def _osv_detail_payload(vuln: dict[str, Any], client: OsvClient) -> dict[str, Any] | None:
+        vuln_id = vuln.get("id")
+        if not isinstance(vuln_id, str) or not vuln_id:
+            return None
+
+        if all(key in vuln for key in ("aliases", "references")) and (
+            extract_cvss_from_osv(vuln) is not None or preferred_cve_from_osv(vuln) is not None
+        ):
+            return vuln
+
+        try:
+            detailed = client.get_vuln(vuln_id)
+        except OsvClientError as exc:
+            LOGGER.debug("OSV detail lookup failed for %s: %s", vuln_id, exc)
+            return vuln if isinstance(vuln, dict) else None
+        if not isinstance(detailed, dict):
+            return vuln if isinstance(vuln, dict) else None
+        return {**vuln, **detailed}
 
     def _nvd_payload_to_findings(
         self,
@@ -409,10 +736,12 @@ class CveLookupAgent:
                 Finding(
                     finding_id=cve_id,
                     cve_id=cve_id,
+                    aliases=[],
                     title=f"{cve_id}: {english_description(cve)}",
                     host=host_ip,
                     port=port.port,
                     source_agents=[self.agent_name],
+                    intel_sources=["nvd"],
                     source_type=SourceType.SERVICE,
                     match_method=match_method,
                     validation_required=False,
@@ -728,4 +1057,21 @@ class CveLookupAgent:
         )
         if port.cpe:
             evidence += f" Enumerated CPE: {', '.join(port.cpe)}."
+        return evidence
+
+    @staticmethod
+    def _osv_evidence(
+        resolved: ResolvedOsvQuery,
+        osv_id: str,
+        match_method: str,
+    ) -> str:
+        evidence = (
+            f"OSV package lookup matched explicit mapping "
+            f"{resolved.ecosystem}/{resolved.package} {resolved.version} for "
+            f"{resolved.product} on {resolved.host_ip}:{resolved.port}/{resolved.protocol}. "
+            f"Match method: {match_method}. This is package-level intelligence, not a "
+            f"CPE-exact confirmation. OSV ID: {osv_id}."
+        )
+        if resolved.notes:
+            evidence += f" Mapping note: {resolved.notes}."
         return evidence

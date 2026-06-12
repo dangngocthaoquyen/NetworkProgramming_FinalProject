@@ -35,10 +35,12 @@ class Finding(VulnBaseModel):
     finding_id: str = Field(min_length=1)
     template_id: str | None = None
     cve_id: str | None = None
+    aliases: list[str] = Field(default_factory=list)
     title: str = Field(min_length=1)
     host: str | None = None
     port: int | None = Field(default=None, ge=1, le=65535)
     source_agents: list[str] = Field(default_factory=list)
+    intel_sources: list[str] = Field(default_factory=list)
     source_type: SourceType = SourceType.SERVICE
     match_method: str | None = None
     validation_required: bool = False

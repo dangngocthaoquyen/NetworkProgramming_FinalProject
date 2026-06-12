@@ -23,3 +23,4 @@ build/
 .env
 .env.*
 data/cache/nvd/
+data/cache/osv/
