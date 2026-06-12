@@ -19,11 +19,29 @@ def write_config(path: Path) -> None:
         "safety:\n"
         "  allowed_cidrs:\n"
         '    - "127.0.0.0/8"\n'
+        '    - "172.16.0.0/12"\n'
         '    - "192.168.0.0/16"\n'
         "  block_public_ip: true\n"
         "scanner:\n"
         "  max_concurrency: 2\n"
-        "  enable_nuclei: false\n",
+        "nuclei:\n"
+        '  mode: "mock"\n'
+        '  binary: "nuclei"\n'
+        "  severity:\n"
+        '    - "critical"\n'
+        '    - "high"\n'
+        "  templates_dir: null\n"
+        "  timeout_seconds: 5.0\n"
+        "  use_mock_fallback: true\n"
+        '  mock_db: "data/nuclei_mock_db.json"\n'
+        "cve_lookup:\n"
+        '  source: "auto"\n'
+        "  min_cvss: 7.0\n"
+        "  nvd:\n"
+        '    cache_dir: "data/cache/nvd"\n'
+        "    use_cache: true\n"
+        "    timeout_seconds: 20.0\n"
+        "    allow_range_matches: false\n",
         encoding="utf-8",
     )
 
@@ -246,7 +264,10 @@ async def test_focused_samples_run_successfully(
 
 @pytest.mark.asyncio
 async def test_full_sample_contains_service_and_os_assessment_data(tmp_path: Path):
+    config = tmp_path / "config.yaml"
+    write_config(config)
     orchestrator = Phase3Orchestrator(
+        config_path=config,
         logs_dir=tmp_path / "logs",
         pi_dir=tmp_path / "triage",
         pi_log_dir=tmp_path / "logs",
@@ -313,8 +334,48 @@ async def test_full_sample_contains_service_and_os_assessment_data(tmp_path: Pat
 
 
 @pytest.mark.asyncio
-async def test_metasploitable_sample_produces_web_template_findings(tmp_path: Path):
+async def test_report_mentions_zero_match_nuclei_cli(tmp_path: Path):
+    class ZeroMatchNucleiAgent:
+        agent_name = "nuclei_agent"
+
+        async def run(self, enum_input: EnumInput) -> AgentResult:
+            return AgentResult(
+                agent_name=self.agent_name,
+                scan_id=enum_input.scan_id,
+                status=AgentStatus.SUCCESS,
+                message="Nuclei CLI completed with 0 critical/high matches.",
+                data={
+                    "findings": [],
+                    "execution_mode": "cli",
+                    "used_mock_fallback": False,
+                    "matched_count": 0,
+                },
+            )
+
+    config = tmp_path / "config.yaml"
+    enum_path = tmp_path / "enum.json"
+    write_config(config)
+    write_enum(enum_path)
     orchestrator = Phase3Orchestrator(
+        config_path=config,
+        logs_dir=tmp_path / "logs",
+        pi_dir=tmp_path / "triage",
+        pi_log_dir=tmp_path / "logs",
+        agents=[ZeroMatchNucleiAgent()],
+    )
+
+    artifacts = await orchestrator.run(enum_path, tmp_path / "reports" / "zero-cli")
+
+    report = artifacts.report_path.read_text(encoding="utf-8")
+    assert "Nuclei CLI completed with 0 critical/high matches." in report
+
+
+@pytest.mark.asyncio
+async def test_metasploitable_sample_produces_web_template_findings(tmp_path: Path):
+    config = tmp_path / "config.yaml"
+    write_config(config)
+    orchestrator = Phase3Orchestrator(
+        config_path=config,
         logs_dir=tmp_path / "logs",
         pi_dir=tmp_path / "triage",
         pi_log_dir=tmp_path / "logs",

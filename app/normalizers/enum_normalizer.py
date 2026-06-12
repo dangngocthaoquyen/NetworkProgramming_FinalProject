@@ -8,6 +8,8 @@ from urllib.parse import urlparse
 
 
 WEB_LIKE_SERVICES = {"http", "https", "http-proxy", "ipp"}
+METASPLOITABLE3_HOST = "172.28.128.3"
+JETTY_CONTINUUM_URL = "http://172.28.128.3:8080/continuum"
 
 
 def normalize_enum_payload(payload: dict[str, Any]) -> dict[str, Any]:
@@ -58,7 +60,63 @@ def _normalize_host_web_inventory(host: dict[str, Any]) -> None:
         )
         seen_urls.add(str(url))
 
+    _add_known_lab_web_contexts(host_ip, host, web_entries, seen_urls)
     host["web"] = web_entries
+
+
+def _add_known_lab_web_contexts(
+    host_ip: str,
+    host: dict[str, Any],
+    web_entries: list[dict[str, Any]],
+    seen_urls: set[str],
+) -> None:
+    if host_ip != METASPLOITABLE3_HOST:
+        return
+
+    for port in host.get("ports", []):
+        if not isinstance(port, dict):
+            continue
+        if not _is_jetty_continuum_port(port):
+            continue
+
+        port.setdefault("discovered_paths", [])
+        if "/continuum" not in port["discovered_paths"]:
+            port["discovered_paths"].append("/continuum")
+
+        if JETTY_CONTINUUM_URL in seen_urls:
+            continue
+
+        web_entries.append(
+            {
+                "url": JETTY_CONTINUUM_URL,
+                "port": port.get("port"),
+                "service": port.get("service"),
+                "product": port.get("product"),
+                "version": port.get("version"),
+                "title": "Continuum",
+                "banner": port.get("banner"),
+                "vhost": port.get("vhost"),
+                "source": port.get("source"),
+                "technologies": list(port.get("technologies", [])),
+                "interesting_paths": ["/continuum"],
+                "api_endpoints": list(port.get("api_endpoints", [])),
+            }
+        )
+        seen_urls.add(JETTY_CONTINUUM_URL)
+
+
+def _is_jetty_continuum_port(port: dict[str, Any]) -> bool:
+    if port.get("port") != 8080:
+        return False
+
+    fields = (
+        str(port.get("service") or ""),
+        str(port.get("product") or ""),
+        str(port.get("version") or ""),
+        str(port.get("banner") or ""),
+        " ".join(str(item) for item in port.get("technologies", [])),
+    )
+    return any("jetty" in value.casefold() for value in fields)
 
 
 def _derived_url(host_ip: str, port: dict[str, Any]) -> str | None:

@@ -11,13 +11,13 @@ scanner:
   max_concurrency: 5
 
 nuclei:
-  mode: "mock"
-  binary: "nuclei"
+  mode: "cli"
+  binary: "${NUCLEI_BINARY:-nuclei}"
   severity:
     - "critical"
     - "high"
   templates_dir: null
-  timeout_seconds: 120.0
+  timeout_seconds: 900.0
   use_mock_fallback: true
   mock_db: "data/nuclei_mock_db.json"
 

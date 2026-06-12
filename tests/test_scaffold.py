@@ -24,9 +24,10 @@ def test_default_config_has_safe_guardrails():
     assert cve_lookup["min_cvss"] == 7.0
     assert cve_lookup["nvd"]["use_cache"] is True
     assert cve_lookup["nvd"]["allow_range_matches"] is False
-    assert nuclei["mode"] == "mock"
-    assert nuclei["binary"] == "nuclei"
+    assert nuclei["mode"] == "cli"
+    assert nuclei["binary"] == "${NUCLEI_BINARY:-nuclei}"
     assert nuclei["severity"] == ["critical", "high"]
+    assert nuclei["timeout_seconds"] == 900.0
     assert nuclei["use_mock_fallback"] is True
     assert any(ipaddress.ip_address("127.0.0.1") in network for network in networks)
     assert any(ipaddress.ip_address("10.0.0.1") in network for network in networks)

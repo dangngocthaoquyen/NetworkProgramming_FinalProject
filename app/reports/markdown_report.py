@@ -178,6 +178,7 @@ def render_markdown_report(
         + (f" - {result.message}" if result.message else "")
         for result in agent_results
     )
+    lines.extend(_nuclei_runtime_notes(agent_results))
     lines.extend(
         [
             "",
@@ -195,3 +196,31 @@ def render_markdown_report(
 def _os_name_version(name: str | None, version: str | None) -> str:
     values = [value for value in (name, version) if value]
     return " ".join(values) if values else "N/A"
+
+
+def _nuclei_runtime_notes(agent_results: tuple[AgentResult, ...]) -> list[str]:
+    for result in agent_results:
+        if result.agent_name != "nuclei_agent":
+            continue
+
+        data = result.data
+        mode = data.get("execution_mode")
+        matched_count = data.get("matched_count")
+        used_mock_fallback = bool(data.get("used_mock_fallback"))
+
+        if mode == "cli" and result.status.value == "success" and matched_count == 0:
+            return [
+                "",
+                "### Nuclei Runtime",
+                "",
+                "- Nuclei CLI completed with 0 critical/high matches.",
+            ]
+        if mode == "mock":
+            fixture_label = "fallback/offline fixture" if used_mock_fallback else "offline fixture"
+            return [
+                "",
+                "### Nuclei Runtime",
+                "",
+                f"- Nuclei used {fixture_label} mode.",
+            ]
+    return []
