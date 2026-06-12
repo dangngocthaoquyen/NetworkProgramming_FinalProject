@@ -27,6 +27,11 @@ except ModuleNotFoundError:
     _restart_with_project_venv()
 
 try:
+    from dotenv import load_dotenv
+except ModuleNotFoundError:
+    _restart_with_project_venv()
+
+try:
     from rich.console import Console
     from rich.table import Table
 except ModuleNotFoundError:
@@ -58,6 +63,9 @@ except ModuleNotFoundError:
             print(value)
 
 from app.orchestrator import PipelineArtifacts, run_phase3
+
+
+load_dotenv()
 
 
 def parse_args() -> argparse.Namespace:

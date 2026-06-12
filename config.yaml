@@ -9,6 +9,23 @@ safety:
 
 scanner:
   max_concurrency: 5
-  enable_nuclei: false
-  enable_nuclei_mock: true
-  nuclei_mock_db: "data/nuclei_mock_db.json"
+
+nuclei:
+  mode: "mock"
+  binary: "nuclei"
+  severity:
+    - "critical"
+    - "high"
+  templates_dir: null
+  timeout_seconds: 120.0
+  use_mock_fallback: true
+  mock_db: "data/nuclei_mock_db.json"
+
+cve_lookup:
+  source: "auto"
+  min_cvss: 7.0
+  nvd:
+    cache_dir: "data/cache/nvd"
+    use_cache: true
+    timeout_seconds: 20.0
+    allow_range_matches: false

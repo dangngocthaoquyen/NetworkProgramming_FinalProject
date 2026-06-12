@@ -33,16 +33,20 @@ class Finding(VulnBaseModel):
     """A single normalized vulnerability finding."""
 
     finding_id: str = Field(min_length=1)
+    template_id: str | None = None
     cve_id: str | None = None
     title: str = Field(min_length=1)
     host: str | None = None
     port: int | None = Field(default=None, ge=1, le=65535)
     source_agents: list[str] = Field(default_factory=list)
     source_type: SourceType = SourceType.SERVICE
+    match_method: str | None = None
+    validation_required: bool = False
     severity: Severity
     cvss: float | None = Field(default=None, ge=0, le=10)
     confidence: float = Field(ge=0, le=1)
     evidence: str = Field(min_length=1)
+    references: list[str] = Field(default_factory=list)
     remediation: str = Field(min_length=1)
     risk_score: float = Field(ge=0, le=100)
 

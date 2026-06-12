@@ -1,11 +1,13 @@
-"""Safety-constrained optional wrapper for the Nuclei scanner."""
+"""Safety-constrained Nuclei wrapper with CLI, mock, and auto modes."""
 
 from __future__ import annotations
 
 import asyncio
 import ipaddress
 import json
+import os
 import shutil
+import tempfile
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -18,8 +20,11 @@ from app.schemas.vuln_schema import Finding, Severity, SourceType
 from app.tools.scope_guard import ScopeGuard, ScopeViolationError
 
 
-ALLOWED_SEVERITIES = ("critical", "high")
-EXCLUDED_TAGS = ("dos", "brute-force", "intrusive")
+DEFAULT_TIMEOUT_SECONDS = 120.0
+DEFAULT_BINARY = "nuclei"
+DEFAULT_MODE = "mock"
+DEFAULT_SEVERITIES = ("critical", "high")
+DEFAULT_EXCLUDED_TAGS = ("dos", "brute-force", "intrusive")
 
 
 class NucleiAgent:
@@ -30,7 +35,7 @@ class NucleiAgent:
     def __init__(
         self,
         config_path: str | Path = "config.yaml",
-        timeout_seconds: float = 120.0,
+        timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
     ) -> None:
         self.config_path = Path(config_path)
         self.timeout_seconds = timeout_seconds
@@ -40,52 +45,30 @@ class NucleiAgent:
 
         scan_id = enum_input.scan_id
         try:
+            config = self._load_config()
             scope_guard = ScopeGuard.from_config(self.config_path)
             scope_guard.validate_enum(enum_input)
             urls = self._validated_urls(enum_input, scope_guard)
 
-            mock_findings = self._mock_findings(enum_input, urls)
-            if mock_findings:
-                return AgentResult(
-                    agent_name=self.agent_name,
-                    scan_id=scan_id,
-                    status=AgentStatus.SUCCESS,
-                    message=f"Offline Nuclei mock returned {len(mock_findings)} findings.",
-                    data={
-                        "findings": [
-                            item.model_dump(mode="json") for item in mock_findings
-                        ]
-                    },
-                )
-
-            if not self._is_enabled():
-                return self._skipped(scan_id, "Nuclei is disabled in config.yaml.")
-
-            nuclei_path = shutil.which("nuclei")
-            if nuclei_path is None:
-                return self._skipped(scan_id, "Nuclei executable was not found in PATH.")
-
             if not urls:
                 return self._skipped(scan_id, "No in-scope URLs were present in enum input.")
 
-            findings: list[Finding] = []
-            errors: list[str] = []
-            for url in urls:
-                url_findings, error = await self._run_url(nuclei_path, url)
-                findings.extend(url_findings)
-                if error:
-                    errors.append(error)
+            mode = config["mode"]
+            if mode == "mock":
+                return self._mock_result(enum_input, urls, scan_id, config)
 
-            status = AgentStatus.PARTIAL if errors and findings else (
-                AgentStatus.FAILED if errors else AgentStatus.SUCCESS
-            )
+            if mode == "cli":
+                return await self._cli_result(enum_input, urls, scan_id, config, allow_mock_fallback=False)
+
+            if mode == "auto":
+                return await self._cli_result(enum_input, urls, scan_id, config, allow_mock_fallback=bool(config["use_mock_fallback"]))
+
             return AgentResult(
                 agent_name=self.agent_name,
                 scan_id=scan_id,
-                status=status,
-                message=f"Nuclei returned {len(findings)} safe-template findings.",
-                data={"findings": [item.model_dump(mode="json") for item in findings]},
-                errors=errors,
+                status=AgentStatus.FAILED,
+                message="Nuclei agent failed safely.",
+                errors=[f"Unsupported nuclei.mode: {mode}"],
             )
         except Exception as exc:
             return AgentResult(
@@ -96,22 +79,122 @@ class NucleiAgent:
                 errors=[str(exc)],
             )
 
-    def _is_enabled(self) -> bool:
-        config: dict[str, Any] = yaml.safe_load(
-            self.config_path.read_text(encoding="utf-8")
-        )
-        scanner = config.get("scanner", {})
-        return scanner.get("enable_nuclei") is True
+    async def _cli_result(
+        self,
+        enum_input: EnumInput,
+        urls: list[str],
+        scan_id: str,
+        config: dict[str, Any],
+        *,
+        allow_mock_fallback: bool,
+    ) -> AgentResult:
+        binary = self._resolve_binary(config["binary"])
+        if binary is None:
+            return self._fallback_or_fail(
+                enum_input,
+                urls,
+                scan_id,
+                config,
+                reason="Nuclei executable was not found in PATH.",
+                allow_mock_fallback=allow_mock_fallback,
+            )
 
-    def _mock_findings(self, enum_input: EnumInput, urls: list[str]) -> list[Finding]:
-        config: dict[str, Any] = yaml.safe_load(
-            self.config_path.read_text(encoding="utf-8")
-        )
-        scanner = config.get("scanner", {})
-        if scanner.get("enable_nuclei_mock") is not True:
-            return []
+        findings, error = await self._run_cli(binary, urls, config)
+        if error is not None:
+            return self._fallback_or_fail(
+                enum_input,
+                urls,
+                scan_id,
+                config,
+                reason=error,
+                allow_mock_fallback=allow_mock_fallback,
+            )
 
-        mock_path = Path(scanner.get("nuclei_mock_db", "data/nuclei_mock_db.json"))
+        return AgentResult(
+            agent_name=self.agent_name,
+            scan_id=scan_id,
+            status=AgentStatus.SUCCESS,
+            message=f"Nuclei CLI returned {len(findings)} safe-template findings.",
+            data={"findings": [item.model_dump(mode="json") for item in findings]},
+        )
+
+    def _fallback_or_fail(
+        self,
+        enum_input: EnumInput,
+        urls: list[str],
+        scan_id: str,
+        config: dict[str, Any],
+        *,
+        reason: str,
+        allow_mock_fallback: bool,
+    ) -> AgentResult:
+        if allow_mock_fallback:
+            mock_findings = self._mock_findings(enum_input, urls, config)
+            if mock_findings:
+                return AgentResult(
+                    agent_name=self.agent_name,
+                    scan_id=scan_id,
+                    status=AgentStatus.SUCCESS,
+                    message=f"Nuclei CLI unavailable; offline mock returned {len(mock_findings)} findings.",
+                    data={"findings": [item.model_dump(mode="json") for item in mock_findings]},
+                    errors=[reason],
+                )
+        return AgentResult(
+            agent_name=self.agent_name,
+            scan_id=scan_id,
+            status=AgentStatus.FAILED,
+            message="Nuclei CLI failed.",
+            errors=[reason],
+        )
+
+    def _mock_result(
+        self,
+        enum_input: EnumInput,
+        urls: list[str],
+        scan_id: str,
+        config: dict[str, Any],
+    ) -> AgentResult:
+        findings = self._mock_findings(enum_input, urls, config)
+        if findings:
+            return AgentResult(
+                agent_name=self.agent_name,
+                scan_id=scan_id,
+                status=AgentStatus.SUCCESS,
+                message=f"Offline Nuclei mock returned {len(findings)} findings.",
+                data={"findings": [item.model_dump(mode="json") for item in findings]},
+            )
+        return self._skipped(scan_id, "Nuclei mock mode produced no matching findings.")
+
+    def _load_config(self) -> dict[str, Any]:
+        raw: dict[str, Any] = yaml.safe_load(self.config_path.read_text(encoding="utf-8"))
+        nuclei = raw.get("nuclei", {}) if isinstance(raw, dict) else {}
+        if not isinstance(nuclei, dict):
+            raise ValueError("config.yaml nuclei must be a mapping")
+
+        severities = tuple(str(item).lower() for item in nuclei.get("severity", DEFAULT_SEVERITIES))
+        if not severities:
+            raise ValueError("nuclei.severity must contain at least one value")
+
+        return {
+            "mode": str(nuclei.get("mode", DEFAULT_MODE)).lower(),
+            "binary": str(nuclei.get("binary", DEFAULT_BINARY)),
+            "severity": severities,
+            "templates_dir": nuclei.get("templates_dir"),
+            "timeout_seconds": float(nuclei.get("timeout_seconds", self.timeout_seconds)),
+            "use_mock_fallback": bool(nuclei.get("use_mock_fallback", True)),
+            "mock_db": str(nuclei.get("mock_db", "data/nuclei_mock_db.json")),
+        }
+
+    @staticmethod
+    def _resolve_binary(binary: str) -> str | None:
+        if os.path.sep in binary or (os.path.altsep and os.path.altsep in binary):
+            return binary if Path(binary).exists() else None
+        return shutil.which(binary)
+
+    def _mock_findings(
+        self, enum_input: EnumInput, urls: list[str], config: dict[str, Any]
+    ) -> list[Finding]:
+        mock_path = Path(config["mock_db"])
         payload = json.loads(mock_path.read_text(encoding="utf-8"))
         findings: list[Finding] = []
         for record in payload.get("records", []):
@@ -124,17 +207,18 @@ class NucleiAgent:
                 continue
 
             parsed_url = urlparse(url)
+            severity = Severity(str(record["severity"]).lower())
+            if severity.value not in config["severity"]:
+                continue
             details = [
                 f"url={url}",
                 f"path={matched_context['path']}",
                 f"vhost={matched_context['vhost'] or 'N/A'}",
             ]
-            severity = Severity(str(record["severity"]).lower())
-            if severity.value not in ALLOWED_SEVERITIES:
-                continue
             findings.append(
                 Finding(
                     finding_id=str(record["template_id"]),
+                    template_id=str(record["template_id"]),
                     title=str(record["title"]),
                     host=parsed_url.hostname,
                     port=parsed_url.port or (443 if parsed_url.scheme == "https" else 80),
@@ -144,11 +228,73 @@ class NucleiAgent:
                     cvss=float(record["cvss"]),
                     confidence=float(record["confidence"]),
                     evidence=f"{record['evidence']} Matched context: {', '.join(details)}.",
+                    references=[str(item) for item in record.get("references", [])],
                     remediation=str(record["remediation"]),
                     risk_score=0,
                 )
             )
         return findings
+
+    async def _run_cli(
+        self,
+        nuclei_path: str,
+        urls: list[str],
+        config: dict[str, Any],
+    ) -> tuple[list[Finding], str | None]:
+        temp_path: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                delete=False,
+                suffix=".txt",
+            ) as handle:
+                handle.write("\n".join(urls))
+                handle.write("\n")
+                temp_path = Path(handle.name)
+
+            command = [
+                nuclei_path,
+                "-list",
+                str(temp_path),
+                "-jsonl",
+                "-silent",
+                "-no-interactsh",
+                "-severity",
+                ",".join(config["severity"]),
+                "-exclude-tags",
+                ",".join(DEFAULT_EXCLUDED_TAGS),
+                "-duc",
+            ]
+            templates_dir = config.get("templates_dir")
+            if templates_dir:
+                command.extend(["-templates", str(templates_dir)])
+
+            process = await asyncio.create_subprocess_exec(
+                *command,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(),
+                timeout=config["timeout_seconds"],
+            )
+        except TimeoutError:
+            if "process" in locals() and process.returncode is None:
+                process.kill()
+                await process.communicate()
+            return [], "Nuclei CLI timed out."
+        except OSError as exc:
+            return [], f"Nuclei CLI could not start: {exc}"
+        finally:
+            if temp_path is not None:
+                temp_path.unlink(missing_ok=True)
+
+        if process.returncode != 0:
+            reason = stderr.decode("utf-8", errors="replace").strip()
+            return [], f"Nuclei CLI failed: {reason or 'unknown error'}"
+
+        return self._parse_jsonl(stdout.decode("utf-8", errors="replace"), allowed_severities=config["severity"]), None
 
     @staticmethod
     def _enum_contexts(enum_input: EnumInput, url: str) -> list[dict[str, Any]]:
@@ -157,9 +303,7 @@ class NucleiAgent:
             for web in host.web:
                 if str(web.url) != url:
                     continue
-                paths = list(
-                    dict.fromkeys(["/", *web.interesting_paths, *web.api_endpoints])
-                )
+                paths = list(dict.fromkeys(["/", *web.interesting_paths, *web.api_endpoints]))
                 for path in paths:
                     contexts.append(
                         {
@@ -228,10 +372,10 @@ class NucleiAgent:
 
                 if url not in urls:
                     urls.append(url)
+
             for port in host.ports:
                 if port.url is None:
                     continue
-
                 url = str(port.url)
                 hostname = urlparse(url).hostname
                 if hostname is None:
@@ -246,75 +390,42 @@ class NucleiAgent:
                     urls.append(url)
         return urls
 
-    async def _run_url(
-        self, nuclei_path: str, url: str
-    ) -> tuple[list[Finding], str | None]:
-        command = [
-            nuclei_path,
-            "-u",
-            url,
-            "-jsonl",
-            "-silent",
-            "-no-interactsh",
-            "-severity",
-            ",".join(ALLOWED_SEVERITIES),
-            "-exclude-tags",
-            ",".join(EXCLUDED_TAGS),
-        ]
-
-        try:
-            process = await asyncio.create_subprocess_exec(
-                *command,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, stderr = await asyncio.wait_for(
-                process.communicate(), timeout=self.timeout_seconds
-            )
-        except TimeoutError:
-            if "process" in locals() and process.returncode is None:
-                process.kill()
-                await process.communicate()
-            return [], f"Nuclei timed out for URL: {url}"
-        except OSError as exc:
-            return [], f"Nuclei could not start for {url}: {exc}"
-
-        if process.returncode != 0:
-            reason = stderr.decode("utf-8", errors="replace").strip()
-            return [], f"Nuclei failed for {url}: {reason or 'unknown error'}"
-
-        return self._parse_jsonl(stdout.decode("utf-8", errors="replace")), None
-
     @staticmethod
-    def _parse_jsonl(output: str) -> list[Finding]:
+    def _parse_jsonl(
+        output: str,
+        *,
+        allowed_severities: tuple[str, ...] = DEFAULT_SEVERITIES,
+    ) -> list[Finding]:
         findings: list[Finding] = []
         for line in output.splitlines():
             try:
                 item = json.loads(line)
                 info = item["info"]
                 severity = Severity(str(info["severity"]).lower())
-                if severity.value not in ALLOWED_SEVERITIES:
+                if severity.value not in allowed_severities:
                     continue
 
                 template_id = str(item.get("template-id") or item.get("template") or "nuclei")
                 matched_at = str(item.get("matched-at") or item.get("host") or "unknown")
                 parsed_match = urlparse(matched_at)
+                references = NucleiAgent._extract_references(info)
                 findings.append(
                     Finding(
                         finding_id=template_id,
+                        template_id=template_id,
                         title=str(info.get("name") or template_id),
                         host=parsed_match.hostname,
-                        port=parsed_match.port,
+                        port=parsed_match.port or (443 if parsed_match.scheme == "https" else 80 if parsed_match.hostname else None),
                         source_agents=["nuclei_agent"],
                         source_type=SourceType.WEB_TEMPLATE,
                         severity=severity,
                         cvss={
                             Severity.CRITICAL: 9.0,
                             Severity.HIGH: 7.0,
-                            Severity.MEDIUM: 4.0,
                         }[severity],
                         confidence=0.80,
-                        evidence=f"Nuclei safe-template match at {matched_at}.",
+                        evidence=f"Nuclei CLI match at {matched_at}.",
+                        references=references,
                         remediation=str(
                             info.get("remediation")
                             or "Review the finding and apply vendor guidance."
@@ -322,13 +433,27 @@ class NucleiAgent:
                         risk_score={
                             Severity.CRITICAL: 9.0,
                             Severity.HIGH: 8.0,
-                            Severity.MEDIUM: 5.0,
                         }[severity],
                     )
                 )
             except (json.JSONDecodeError, KeyError, TypeError, ValueError):
                 continue
         return findings
+
+    @staticmethod
+    def _extract_references(info: dict[str, Any]) -> list[str]:
+        for key in ("reference", "references"):
+            value = info.get(key)
+            if isinstance(value, list):
+                return [str(item) for item in value if str(item)]
+            if isinstance(value, str) and value:
+                return [value]
+        classification = info.get("classification", {})
+        if isinstance(classification, dict):
+            references = classification.get("reference")
+            if isinstance(references, list):
+                return [str(item) for item in references if str(item)]
+        return []
 
     def _skipped(self, scan_id: str, reason: str) -> AgentResult:
         return AgentResult(

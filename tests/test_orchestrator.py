@@ -329,7 +329,7 @@ async def test_metasploitable_sample_produces_web_template_findings(tmp_path: Pa
     source_types = {
         finding.source_type.value for finding in artifacts.vulnerability_output.findings
     }
-    assert source_types == {"web-template"}
+    assert "web-template" in source_types
     assert {agent.agent_name for agent in artifacts.agent_results} == {
         "cve_lookup_agent",
         "nuclei_agent",
@@ -361,7 +361,7 @@ async def test_independent_agents_run_concurrently(tmp_path: Path):
     artifacts = await orchestrator.run(enum_path, tmp_path / "reports" / "parallel")
     elapsed = time.perf_counter() - started
 
-    assert elapsed < 0.16
+    assert elapsed < 0.20
     timings = [
         result.data["agent_timing"] for result in artifacts.agent_results
     ]

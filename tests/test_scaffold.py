@@ -11,6 +11,8 @@ def test_default_config_has_safe_guardrails():
     config = yaml.safe_load((ROOT / "config.yaml").read_text(encoding="utf-8"))
     safety = config["safety"]
     scanner = config["scanner"]
+    cve_lookup = config["cve_lookup"]
+    nuclei = config["nuclei"]
 
     networks = [
         ipaddress.ip_network(value) for value in safety["allowed_cidrs"]
@@ -18,7 +20,14 @@ def test_default_config_has_safe_guardrails():
 
     assert safety["block_public_ip"] is True
     assert scanner["max_concurrency"] == 5
-    assert scanner["enable_nuclei"] is False
+    assert cve_lookup["source"] == "auto"
+    assert cve_lookup["min_cvss"] == 7.0
+    assert cve_lookup["nvd"]["use_cache"] is True
+    assert cve_lookup["nvd"]["allow_range_matches"] is False
+    assert nuclei["mode"] == "mock"
+    assert nuclei["binary"] == "nuclei"
+    assert nuclei["severity"] == ["critical", "high"]
+    assert nuclei["use_mock_fallback"] is True
     assert any(ipaddress.ip_address("127.0.0.1") in network for network in networks)
     assert any(ipaddress.ip_address("10.0.0.1") in network for network in networks)
     assert any(ipaddress.ip_address("172.16.0.1") in network for network in networks)

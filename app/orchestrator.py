@@ -67,7 +67,7 @@ class Phase3Orchestrator:
         self.max_concurrency = self._max_concurrency()
         self.scope_guard = ScopeGuard.from_config(self.config_path)
         self.agents: list[Agent] = agents or [
-            CveLookupAgent(),
+            CveLookupAgent(config_path=self.config_path),
             NucleiAgent(config_path=self.config_path),
         ]
 

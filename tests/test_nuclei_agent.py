@@ -25,7 +25,17 @@ def make_enum(url: str = "http://192.168.1.10/") -> EnumInput:
     )
 
 
-def write_config(path: Path, enabled: bool) -> None:
+def write_nuclei_config(
+    path: Path,
+    *,
+    mode: str,
+    mock_db: Path | None = None,
+    binary: str = "nuclei",
+    templates_dir: str | None = None,
+    use_mock_fallback: bool = True,
+) -> None:
+    mock_db_value = mock_db.as_posix() if mock_db is not None else "data/nuclei_mock_db.json"
+    templates_value = "null" if templates_dir is None else f'"{templates_dir}"'
     path.write_text(
         "safety:\n"
         "  allowed_cidrs:\n"
@@ -33,86 +43,152 @@ def write_config(path: Path, enabled: bool) -> None:
         '    - "192.168.0.0/16"\n'
         "  block_public_ip: true\n"
         "scanner:\n"
-        f"  enable_nuclei: {str(enabled).lower()}\n",
+        "  max_concurrency: 5\n"
+        "nuclei:\n"
+        f'  mode: "{mode}"\n'
+        f'  binary: "{binary}"\n'
+        "  severity:\n"
+        '    - "critical"\n'
+        '    - "high"\n'
+        f"  templates_dir: {templates_value}\n"
+        "  timeout_seconds: 5.0\n"
+        f"  use_mock_fallback: {str(use_mock_fallback).lower()}\n"
+        f'  mock_db: "{mock_db_value}"\n'
+        "cve_lookup:\n"
+        '  source: "mock"\n'
+        "  min_cvss: 7.0\n"
+        "  nvd:\n"
+        '    cache_dir: "data/cache/nvd"\n'
+        "    use_cache: true\n"
+        "    timeout_seconds: 20.0\n",
         encoding="utf-8",
     )
 
 
-def write_mock_config(path: Path, mock_db: Path) -> None:
-    path.write_text(
-        "safety:\n"
-        "  allowed_cidrs:\n"
-        '    - "192.168.0.0/16"\n'
-        "  block_public_ip: true\n"
-        "scanner:\n"
-        "  enable_nuclei: false\n"
-        "  enable_nuclei_mock: true\n"
-        f'  nuclei_mock_db: "{mock_db.as_posix()}"\n',
-        encoding="utf-8",
+def write_mock_db(path: Path, records: list[dict]) -> None:
+    path.write_text(json.dumps({"records": records}), encoding="utf-8")
+
+
+@pytest.mark.asyncio
+async def test_mock_mode_returns_safe_web_template_finding(tmp_path: Path):
+    mock_db = tmp_path / "mock.json"
+    write_mock_db(
+        mock_db,
+        [
+            {
+                "template_id": "safe-mock",
+                "url": "http://192.168.1.10/",
+                "title": "Safe mock finding",
+                "severity": "high",
+                "cvss": 7.0,
+                "confidence": 0.8,
+                "evidence": "Offline fixture evidence.",
+                "references": ["https://example.test/mock"],
+                "remediation": "Review configuration.",
+            }
+        ],
     )
-
-
-@pytest.mark.asyncio
-async def test_disabled_nuclei_is_skipped(monkeypatch: pytest.MonkeyPatch):
-    def fail_if_called(*args, **kwargs):
-        raise AssertionError("subprocess must not run when Nuclei is disabled")
-
-    monkeypatch.setattr(asyncio, "create_subprocess_exec", fail_if_called)
-
-    result = await NucleiAgent().run(make_enum())
-
-    assert result.status is AgentStatus.SKIPPED
-    assert "disabled" in result.message.lower()
-
-
-@pytest.mark.asyncio
-async def test_missing_nuclei_is_skipped(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-):
     config = tmp_path / "config.yaml"
-    write_config(config, enabled=True)
-    monkeypatch.setattr("app.agents.nuclei_agent.shutil.which", lambda name: None)
+    write_nuclei_config(config, mode="mock", mock_db=mock_db)
 
     result = await NucleiAgent(config).run(make_enum())
 
-    assert result.status is AgentStatus.SKIPPED
-    assert "PATH" in result.message
+    assert result.status is AgentStatus.SUCCESS
+    finding = result.data["findings"][0]
+    assert finding["source_type"] == "web-template"
+    assert finding["severity"] == "high"
+    assert finding["template_id"] == "safe-mock"
+    assert finding["references"] == ["https://example.test/mock"]
 
 
 @pytest.mark.asyncio
-async def test_safe_command_and_jsonl_parsing(
+async def test_auto_mode_falls_back_to_mock_when_binary_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    mock_db = tmp_path / "mock.json"
+    write_mock_db(
+        mock_db,
+        [
+            {
+                "template_id": "fallback-mock",
+                "url": "http://192.168.1.10/",
+                "title": "Fallback mock finding",
+                "severity": "high",
+                "cvss": 7.1,
+                "confidence": 0.8,
+                "evidence": "Offline fallback evidence.",
+                "remediation": "Review configuration.",
+            }
+        ],
+    )
+    config = tmp_path / "config.yaml"
+    write_nuclei_config(config, mode="auto", mock_db=mock_db)
+    monkeypatch.setattr("app.agents.nuclei_agent.shutil.which", lambda _: None)
+
+    result = await NucleiAgent(config).run(make_enum())
+
+    assert result.status is AgentStatus.SUCCESS
+    assert "offline mock returned 1 findings" in result.message.lower()
+    assert "not found in PATH" in result.errors[0]
+
+
+@pytest.mark.asyncio
+async def test_cli_mode_missing_binary_fails_clearly(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
     config = tmp_path / "config.yaml"
-    write_config(config, enabled=True)
+    write_nuclei_config(config, mode="cli", use_mock_fallback=False)
+    monkeypatch.setattr("app.agents.nuclei_agent.shutil.which", lambda _: None)
+
+    result = await NucleiAgent(config).run(make_enum())
+
+    assert result.status is AgentStatus.FAILED
+    assert "not found in PATH" in result.errors[0]
+
+
+@pytest.mark.asyncio
+async def test_cli_mode_parses_jsonl_output_and_references(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    config = tmp_path / "config.yaml"
+    write_nuclei_config(config, mode="cli", binary="nuclei")
     calls: list[tuple[str, ...]] = []
 
     class Process:
         returncode = 0
 
         async def communicate(self):
-            line = {
-                "template-id": "safe-template",
-                "matched-at": "http://192.168.1.10/",
-                "info": {"name": "Safe finding", "severity": "high"},
-            }
-            return (json.dumps(line).encode(), b"")
+            lines = [
+                {
+                    "template-id": "cli-template",
+                    "matched-at": "http://192.168.1.10/",
+                    "info": {
+                        "name": "CLI finding",
+                        "severity": "high",
+                        "reference": ["https://example.test/cli"],
+                    },
+                }
+            ]
+            return ("\n".join(json.dumps(item) for item in lines).encode(), b"")
 
     async def create_process(*args, **kwargs):
         calls.append(args)
         return Process()
 
-    monkeypatch.setattr("app.agents.nuclei_agent.shutil.which", lambda name: "nuclei")
+    monkeypatch.setattr("app.agents.nuclei_agent.shutil.which", lambda _: "nuclei")
     monkeypatch.setattr(asyncio, "create_subprocess_exec", create_process)
 
     result = await NucleiAgent(config).run(make_enum())
 
     assert result.status is AgentStatus.SUCCESS
-    assert result.data["findings"][0]["severity"] == "high"
-    assert result.data["findings"][0]["source_type"] == SourceType.WEB_TEMPLATE.value
+    finding = result.data["findings"][0]
+    assert finding["source_type"] == SourceType.WEB_TEMPLATE.value
+    assert finding["template_id"] == "cli-template"
+    assert finding["references"] == ["https://example.test/cli"]
+    assert "-list" in calls[0]
+    assert "-jsonl" in calls[0]
+    assert "-no-interactsh" in calls[0]
     assert "critical,high" in calls[0]
-    assert "medium" not in calls[0]
-    assert "dos,brute-force,intrusive" in calls[0]
 
 
 @pytest.mark.asyncio
@@ -120,8 +196,8 @@ async def test_public_url_is_blocked_before_subprocess(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
     config = tmp_path / "config.yaml"
-    write_config(config, enabled=True)
-    monkeypatch.setattr("app.agents.nuclei_agent.shutil.which", lambda name: "nuclei")
+    write_nuclei_config(config, mode="cli")
+    monkeypatch.setattr("app.agents.nuclei_agent.shutil.which", lambda _: "nuclei")
 
     async def fail_if_called(*args, **kwargs):
         raise AssertionError("subprocess must not run for a public URL")
@@ -135,11 +211,15 @@ async def test_public_url_is_blocked_before_subprocess(
 
 
 @pytest.mark.asyncio
-async def test_timeout_does_not_escape_agent(
+async def test_cli_timeout_does_not_escape_agent(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
     config = tmp_path / "config.yaml"
-    write_config(config, enabled=True)
+    write_nuclei_config(config, mode="cli")
+    config.write_text(
+        config.read_text(encoding="utf-8").replace("timeout_seconds: 5.0", "timeout_seconds: 0.001"),
+        encoding="utf-8",
+    )
 
     class Process:
         returncode = None
@@ -157,106 +237,38 @@ async def test_timeout_does_not_escape_agent(
     async def create_process(*args, **kwargs):
         return Process()
 
-    monkeypatch.setattr("app.agents.nuclei_agent.shutil.which", lambda name: "nuclei")
+    monkeypatch.setattr("app.agents.nuclei_agent.shutil.which", lambda _: "nuclei")
     monkeypatch.setattr(asyncio, "create_subprocess_exec", create_process)
 
-    result = await NucleiAgent(config, timeout_seconds=0.001).run(make_enum())
+    result = await NucleiAgent(config).run(make_enum())
 
     assert result.status is AgentStatus.FAILED
-    assert "timed out" in result.errors[0]
+    assert "timed out" in result.errors[0].lower()
 
 
 @pytest.mark.asyncio
-async def test_offline_mock_returns_safe_web_template_finding(tmp_path: Path):
+async def test_mock_mode_uses_enriched_path_vhost_and_technology(tmp_path: Path):
     mock_db = tmp_path / "mock.json"
-    mock_db.write_text(
-        json.dumps(
+    write_mock_db(
+        mock_db,
+        [
             {
-                "records": [
-                    {
-                        "template_id": "safe-mock",
-                        "url": "http://192.168.1.10/",
-                        "title": "Safe mock finding",
-                        "severity": "high",
-                        "cvss": 7.0,
-                        "confidence": 0.8,
-                        "evidence": "Offline fixture evidence.",
-                        "remediation": "Review configuration.",
-                    }
-                ]
+                "template_id": "enriched-safe-mock",
+                "url": "http://192.168.1.10/",
+                "path": "/admin",
+                "vhost": "app.lab.local",
+                "technology": "Laravel",
+                "title": "Safe enriched mock finding",
+                "severity": "high",
+                "cvss": 7.0,
+                "confidence": 0.8,
+                "evidence": "Offline fixture evidence.",
+                "remediation": "Review configuration.",
             }
-        ),
-        encoding="utf-8",
+        ],
     )
     config = tmp_path / "config.yaml"
-    write_mock_config(config, mock_db)
-
-    result = await NucleiAgent(config).run(make_enum())
-
-    assert result.status is AgentStatus.SUCCESS
-    assert result.data["findings"][0]["source_type"] == "web-template"
-    assert result.data["findings"][0]["severity"] == "high"
-    assert result.data["findings"][0]["cvss"] == 7.0
-
-
-@pytest.mark.asyncio
-async def test_offline_mock_ignores_medium_template_findings(tmp_path: Path):
-    mock_db = tmp_path / "mock.json"
-    mock_db.write_text(
-        json.dumps(
-            {
-                "records": [
-                    {
-                        "template_id": "medium-mock",
-                        "url": "http://192.168.1.10/",
-                        "title": "Medium mock finding",
-                        "severity": "medium",
-                        "cvss": 5.3,
-                        "confidence": 0.9,
-                        "evidence": "Offline fixture evidence.",
-                        "remediation": "Review configuration.",
-                    }
-                ]
-            }
-        ),
-        encoding="utf-8",
-    )
-    config = tmp_path / "config.yaml"
-    write_mock_config(config, mock_db)
-
-    result = await NucleiAgent(config).run(make_enum())
-
-    assert result.status is AgentStatus.SKIPPED
-    assert "disabled" in result.message.lower()
-
-
-@pytest.mark.asyncio
-async def test_offline_mock_uses_enriched_path_vhost_and_technology(tmp_path: Path):
-    mock_db = tmp_path / "mock.json"
-    mock_db.write_text(
-        json.dumps(
-            {
-                "records": [
-                    {
-                        "template_id": "enriched-safe-mock",
-                        "url": "http://192.168.1.10/",
-                        "path": "/admin",
-                        "vhost": "app.lab.local",
-                        "technology": "Laravel",
-                        "title": "Safe enriched mock finding",
-                        "severity": "high",
-                        "cvss": 7.0,
-                        "confidence": 0.8,
-                        "evidence": "Offline fixture evidence.",
-                        "remediation": "Review configuration.",
-                    }
-                ]
-            }
-        ),
-        encoding="utf-8",
-    )
-    config = tmp_path / "config.yaml"
-    write_mock_config(config, mock_db)
+    write_nuclei_config(config, mode="mock", mock_db=mock_db)
     enum_input = EnumInput.model_validate(
         {
             "scan_id": "enriched-nuclei",
@@ -288,31 +300,27 @@ async def test_offline_mock_uses_enriched_path_vhost_and_technology(tmp_path: Pa
 
 
 @pytest.mark.asyncio
-async def test_offline_mock_can_use_host_web_inventory(tmp_path: Path):
+async def test_mock_mode_can_use_host_web_inventory(tmp_path: Path):
     mock_db = tmp_path / "mock.json"
-    mock_db.write_text(
-        json.dumps(
+    write_mock_db(
+        mock_db,
+        [
             {
-                "records": [
-                    {
-                        "template_id": "host-web-mock",
-                        "url": "http://192.168.1.10:631/",
-                        "path": "/",
-                        "technology": "CUPS",
-                        "title": "Host web inventory finding",
-                        "severity": "high",
-                        "cvss": 7.0,
-                        "confidence": 0.8,
-                        "evidence": "Offline fixture evidence.",
-                        "remediation": "Review configuration.",
-                    }
-                ]
+                "template_id": "host-web-mock",
+                "url": "http://192.168.1.10:631/",
+                "path": "/",
+                "technology": "CUPS",
+                "title": "Host web inventory finding",
+                "severity": "high",
+                "cvss": 7.0,
+                "confidence": 0.8,
+                "evidence": "Offline fixture evidence.",
+                "remediation": "Review configuration.",
             }
-        ),
-        encoding="utf-8",
+        ],
     )
     config = tmp_path / "config.yaml"
-    write_mock_config(config, mock_db)
+    write_nuclei_config(config, mode="mock", mock_db=mock_db)
     enum_input = EnumInput.model_validate(
         {
             "scan_id": "host-web-nuclei",

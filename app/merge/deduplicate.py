@@ -28,11 +28,13 @@ def deduplicate_findings(findings: list[Finding]) -> list[Finding]:
         source_agents = _unique(existing.source_agents + finding.source_agents)
         evidence = _unique(_evidence_parts(existing.evidence) + _evidence_parts(finding.evidence))
         remediations = _unique([existing.remediation, finding.remediation])
+        references = _unique(existing.references + finding.references)
 
         merged[key] = existing.model_copy(
             update={
                 "source_agents": source_agents,
                 "evidence": "\n".join(evidence),
+                "references": references,
                 "remediation": "\n".join(remediations),
                 "cvss": max(
                     value
