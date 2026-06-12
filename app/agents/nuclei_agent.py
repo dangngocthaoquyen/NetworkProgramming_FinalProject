@@ -154,6 +154,23 @@ class NucleiAgent:
     def _enum_contexts(enum_input: EnumInput, url: str) -> list[dict[str, Any]]:
         contexts: list[dict[str, Any]] = []
         for host in enum_input.hosts:
+            for web in host.web:
+                if str(web.url) != url:
+                    continue
+                paths = list(
+                    dict.fromkeys(["/", *web.interesting_paths, *web.api_endpoints])
+                )
+                for path in paths:
+                    contexts.append(
+                        {
+                            "path": path,
+                            "vhost": web.vhost,
+                            "host_vhosts": host.vhosts,
+                            "technologies": web.technologies,
+                            "api_endpoints": web.api_endpoints,
+                            "discovered_paths": web.interesting_paths,
+                        }
+                    )
             for port in host.ports:
                 if port.url is None or str(port.url) != url:
                     continue
@@ -198,6 +215,19 @@ class NucleiAgent:
     def _validated_urls(enum_input: EnumInput, scope_guard: ScopeGuard) -> list[str]:
         urls: list[str] = []
         for host in enum_input.hosts:
+            for web in host.web:
+                url = str(web.url)
+                hostname = urlparse(url).hostname
+                if hostname is None:
+                    raise ScopeViolationError(f"URL has no hostname: {url}")
+
+                try:
+                    scope_guard.validate_ip(hostname)
+                except ipaddress.AddressValueError:
+                    scope_guard.validate_hostname(hostname)
+
+                if url not in urls:
+                    urls.append(url)
             for port in host.ports:
                 if port.url is None:
                     continue

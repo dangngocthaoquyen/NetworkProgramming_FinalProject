@@ -18,6 +18,7 @@ from app.agents.cve_lookup_agent import CveLookupAgent
 from app.agents.nuclei_agent import NucleiAgent
 from app.merge.deduplicate import deduplicate_findings
 from app.merge.scoring import score_finding
+from app.normalizers.enum_normalizer import normalize_enum_payload
 from app.reports.markdown_report import render_markdown_report
 from app.schemas.agent_result_schema import AgentResult, AgentStatus
 from app.schemas.enum_schema import EnumInput
@@ -303,6 +304,7 @@ class Phase3Orchestrator:
     @staticmethod
     def _load_enum(enum_path: str | Path) -> EnumInput:
         payload = json.loads(Path(enum_path).read_text(encoding="utf-8"))
+        payload = normalize_enum_payload(payload)
         return EnumInput.model_validate(payload)
 
 

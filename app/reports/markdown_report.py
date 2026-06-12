@@ -106,6 +106,23 @@ def render_markdown_report(
                     "",
                 ]
             )
+        if host.web:
+            lines.append("#### Web Surfaces")
+            lines.append("")
+            for web in host.web:
+                lines.extend(
+                    [
+                        f"- URL: {web.url}",
+                        f"- Product/version: {_os_name_version(web.product, web.version)}",
+                        f"- Title: {web.title or 'N/A'}",
+                        f"- Banner: {web.banner or 'N/A'}",
+                        f"- Vhost: {web.vhost or 'N/A'}",
+                        f"- Technologies: {', '.join(web.technologies) or 'N/A'}",
+                        f"- Interesting paths: {', '.join(web.interesting_paths) or 'N/A'}",
+                        f"- API endpoints: {', '.join(web.api_endpoints) or 'N/A'}",
+                        "",
+                    ]
+                )
 
     lines.extend(
         [

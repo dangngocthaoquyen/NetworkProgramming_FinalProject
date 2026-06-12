@@ -1,7 +1,7 @@
 """Shared input, finding, and report schemas."""
 
 from app.schemas.agent_result_schema import AgentResult, AgentStatus
-from app.schemas.enum_schema import EnumInput, Host, OperatingSystem, Port
+from app.schemas.enum_schema import EnumInput, Host, OperatingSystem, Port, WebEndpoint
 from app.schemas.vuln_schema import Finding, Severity, SourceType, VulnerabilityOutput
 
 __all__ = [
@@ -12,6 +12,7 @@ __all__ = [
     "Host",
     "OperatingSystem",
     "Port",
+    "WebEndpoint",
     "Severity",
     "SourceType",
     "VulnerabilityOutput",

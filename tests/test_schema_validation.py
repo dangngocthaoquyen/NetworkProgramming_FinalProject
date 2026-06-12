@@ -31,6 +31,7 @@ def test_enum_lab_sample_is_valid():
         "enum_lab_linux_os.json",
         "enum_lab_windows_os.json",
         "enum_lab_full.json",
+        "enum_metasploitable3_ub1404.json",
     ],
 )
 def test_focused_enum_samples_are_valid(sample_name: str):
@@ -48,6 +49,7 @@ def test_focused_enum_samples_are_valid(sample_name: str):
         "enum_lab_linux_os.json",
         "enum_lab_windows_os.json",
         "enum_lab_full.json",
+        "enum_metasploitable3_ub1404.json",
     ],
 )
 def test_realistic_enum_samples_have_non_empty_ports(sample_name: str):
@@ -79,6 +81,20 @@ def test_full_sample_has_previous_phase_metadata():
     assert enum_input.hosts[2].ports[0].cpe == ["cpe:/a:nginx:nginx:1.18.0"]
     assert "/admin" in enum_input.hosts[2].ports[0].discovered_paths
     assert "/api/v1/users" in enum_input.hosts[2].ports[0].api_endpoints
+
+
+def test_metasploitable_sample_has_web_inventory():
+    payload = json.loads(
+        (ROOT / "data" / "samples" / "enum_metasploitable3_ub1404.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    enum_input = EnumInput.model_validate(payload)
+
+    assert str(enum_input.hosts[0].ip) == "172.28.128.3"
+    assert len(enum_input.hosts[0].web) == 3
+    assert str(enum_input.hosts[0].web[1].url) == "http://172.28.128.3:631/"
+    assert "/phpmyadmin/" in enum_input.hosts[0].web[0].interesting_paths
 
 
 def test_enriched_lists_reject_non_string_values():

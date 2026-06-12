@@ -285,3 +285,124 @@ async def test_offline_mock_uses_enriched_path_vhost_and_technology(tmp_path: Pa
     evidence = result.data["findings"][0]["evidence"]
     assert "path=/admin" in evidence
     assert "vhost=app.lab.local" in evidence
+
+
+@pytest.mark.asyncio
+async def test_offline_mock_can_use_host_web_inventory(tmp_path: Path):
+    mock_db = tmp_path / "mock.json"
+    mock_db.write_text(
+        json.dumps(
+            {
+                "records": [
+                    {
+                        "template_id": "host-web-mock",
+                        "url": "http://192.168.1.10:631/",
+                        "path": "/",
+                        "technology": "CUPS",
+                        "title": "Host web inventory finding",
+                        "severity": "high",
+                        "cvss": 7.0,
+                        "confidence": 0.8,
+                        "evidence": "Offline fixture evidence.",
+                        "remediation": "Review configuration.",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    config = tmp_path / "config.yaml"
+    write_mock_config(config, mock_db)
+    enum_input = EnumInput.model_validate(
+        {
+            "scan_id": "host-web-nuclei",
+            "target": "authorized-lab",
+            "hosts": [
+                {
+                    "ip": "192.168.1.10",
+                    "ports": [],
+                    "web": [
+                        {
+                            "url": "http://192.168.1.10:631/",
+                            "port": 631,
+                            "service": "ipp",
+                            "product": "CUPS",
+                            "technologies": ["CUPS"],
+                            "interesting_paths": ["/"],
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+
+    result = await NucleiAgent(config).run(enum_input)
+
+    assert result.status is AgentStatus.SUCCESS
+    assert result.data["findings"][0]["host"] == "192.168.1.10"
+
+
+@pytest.mark.asyncio
+async def test_default_mock_db_matches_metasploitable_web_inventory():
+    enum_input = EnumInput.model_validate(
+        {
+            "scan_id": "metasploitable-web",
+            "target": "authorized-lab",
+            "hosts": [
+                {
+                    "ip": "172.28.128.3",
+                    "ports": [
+                        {
+                            "port": 80,
+                            "service": "http",
+                            "url": "http://172.28.128.3/",
+                            "technologies": ["Apache httpd"],
+                            "discovered_paths": [
+                                "/chat/",
+                                "/drupal/",
+                                "/payroll_app.php",
+                                "/phpmyadmin/",
+                            ],
+                        },
+                        {
+                            "port": 631,
+                            "service": "ipp",
+                            "url": "http://172.28.128.3:631/",
+                            "technologies": ["CUPS"],
+                        },
+                    ],
+                    "web": [
+                        {
+                            "url": "http://172.28.128.3/",
+                            "port": 80,
+                            "service": "http",
+                            "product": "Apache httpd",
+                            "technologies": ["Apache httpd"],
+                            "interesting_paths": [
+                                "/chat/",
+                                "/drupal/",
+                                "/payroll_app.php",
+                                "/phpmyadmin/",
+                            ],
+                        },
+                        {
+                            "url": "http://172.28.128.3:631/",
+                            "port": 631,
+                            "service": "ipp",
+                            "product": "CUPS",
+                            "technologies": ["CUPS"],
+                            "interesting_paths": ["/"],
+                        },
+                    ],
+                }
+            ],
+        }
+    )
+
+    result = await NucleiAgent().run(enum_input)
+
+    assert result.status is AgentStatus.SUCCESS
+    titles = {item["title"] for item in result.data["findings"]}
+    assert "Directory listing exposes web application paths" in titles
+    assert "phpMyAdmin administrative path is exposed" in titles
+    assert "CUPS web interface allows risky PUT method" in titles

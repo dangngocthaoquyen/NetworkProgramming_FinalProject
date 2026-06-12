@@ -12,6 +12,42 @@
       "confidence": 0.8,
       "evidence": "Offline safe template fixture matched the authorized web-lab URL.",
       "remediation": "Restrict administrative paths to trusted networks and require strong authentication."
+    },
+    {
+      "template_id": "lab-apache-directory-listing",
+      "url": "http://172.28.128.3/",
+      "path": "/",
+      "technology": "Apache httpd",
+      "title": "Directory listing exposes web application paths",
+      "severity": "high",
+      "cvss": 7.1,
+      "confidence": 0.85,
+      "evidence": "Offline lab fixture matched Nmap directory-listing evidence for the authorized Metasploitable3 Apache service.",
+      "remediation": "Disable directory indexing and restrict access to non-public application paths and files."
+    },
+    {
+      "template_id": "lab-phpmyadmin-exposed",
+      "url": "http://172.28.128.3/",
+      "path": "/phpmyadmin/",
+      "technology": "Apache httpd",
+      "title": "phpMyAdmin administrative path is exposed",
+      "severity": "high",
+      "cvss": 7.4,
+      "confidence": 0.9,
+      "evidence": "Offline lab fixture matched the exposed phpMyAdmin path from the authorized Metasploitable3 Nmap artifact.",
+      "remediation": "Remove or restrict phpMyAdmin from untrusted networks and place it behind strong authentication."
+    },
+    {
+      "template_id": "lab-cups-put-method",
+      "url": "http://172.28.128.3:631/",
+      "path": "/",
+      "technology": "CUPS",
+      "title": "CUPS web interface allows risky PUT method",
+      "severity": "high",
+      "cvss": 7.0,
+      "confidence": 0.88,
+      "evidence": "Offline lab fixture matched the Nmap http-methods evidence showing PUT on the authorized Metasploitable3 CUPS interface.",
+      "remediation": "Disable unnecessary HTTP methods on the CUPS interface and limit administrative access to trusted operators only."
     }
   ]
 }

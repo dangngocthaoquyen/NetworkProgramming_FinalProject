@@ -313,6 +313,37 @@ async def test_full_sample_contains_service_and_os_assessment_data(tmp_path: Pat
 
 
 @pytest.mark.asyncio
+async def test_metasploitable_sample_produces_web_template_findings(tmp_path: Path):
+    orchestrator = Phase3Orchestrator(
+        logs_dir=tmp_path / "logs",
+        pi_dir=tmp_path / "triage",
+        pi_log_dir=tmp_path / "logs",
+    )
+
+    artifacts = await orchestrator.run(
+        ROOT / "data" / "samples" / "enum_metasploitable3_ub1404.json",
+        tmp_path / "outputs" / "metasploitable3",
+    )
+
+    assert artifacts.vulnerability_output.summary.total >= 1
+    source_types = {
+        finding.source_type.value for finding in artifacts.vulnerability_output.findings
+    }
+    assert source_types == {"web-template"}
+    assert {agent.agent_name for agent in artifacts.agent_results} == {
+        "cve_lookup_agent",
+        "nuclei_agent",
+    }
+    assert all(
+        set(finding.source_agents).issubset({"cve_lookup_agent", "nuclei_agent"})
+        for finding in artifacts.vulnerability_output.findings
+    )
+    titles = {finding.title for finding in artifacts.vulnerability_output.findings}
+    assert "Directory listing exposes web application paths" in titles
+    assert "phpMyAdmin administrative path is exposed" in titles
+
+
+@pytest.mark.asyncio
 async def test_independent_agents_run_concurrently(tmp_path: Path):
     config = tmp_path / "config.yaml"
     enum_path = tmp_path / "enum.json"

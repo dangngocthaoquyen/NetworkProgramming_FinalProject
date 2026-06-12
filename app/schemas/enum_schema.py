@@ -32,6 +32,23 @@ class Port(EnumBaseModel):
     api_endpoints: list[str] = Field(default_factory=list)
 
 
+class WebEndpoint(EnumBaseModel):
+    """A normalized web surface derived from the enumeration artifact."""
+
+    url: AnyHttpUrl
+    port: int | None = Field(default=None, ge=1, le=65535)
+    service: str | None = None
+    product: str | None = None
+    version: str | None = None
+    title: str | None = None
+    banner: str | None = None
+    vhost: str | None = None
+    source: str | None = None
+    technologies: list[str] = Field(default_factory=list)
+    interesting_paths: list[str] = Field(default_factory=list)
+    api_endpoints: list[str] = Field(default_factory=list)
+
+
 class OperatingSystem(EnumBaseModel):
     """Optional host-level operating-system fingerprint from earlier phases."""
 
@@ -54,6 +71,7 @@ class Host(EnumBaseModel):
     vhosts: list[str] = Field(default_factory=list)
     os: OperatingSystem | None = None
     ports: list[Port] = Field(default_factory=list)
+    web: list[WebEndpoint] = Field(default_factory=list)
 
 
 class EnumInput(EnumBaseModel):
