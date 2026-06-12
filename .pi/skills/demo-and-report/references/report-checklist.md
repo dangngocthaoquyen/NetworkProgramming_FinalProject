@@ -3,7 +3,7 @@
 ## Must Verify
 - `enum.json` đọc được và đúng schema.
 - `vuln.json` được sinh ra.
-- `report.md` hoặc `.pi/outputs/ket_qua.md` được sinh ra.
+- `report.md` trong output directory được sinh ra.
 - `cve_candidates.json` có mặt.
 - `nuclei_results.json` có mặt.
 - `pipeline.log` hoặc `logs/<scan>.log` có `agent_timing`.

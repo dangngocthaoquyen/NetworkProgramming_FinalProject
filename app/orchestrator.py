@@ -44,7 +44,6 @@ class PipelineArtifacts:
     report_path: Path
     log_path: Path
     pi_vuln_path: Path
-    pi_report_path: Path
     pi_log_path: Path
 
 
@@ -55,12 +54,14 @@ class Phase3Orchestrator:
         self,
         config_path: str | Path = "config.yaml",
         logs_dir: str | Path = "logs",
-        pi_dir: str | Path = ".pi",
+        pi_dir: str | Path = "triage",
+        pi_log_dir: str | Path = "logs",
         agents: list[Agent] | None = None,
     ) -> None:
         self.config_path = Path(config_path)
         self.logs_dir = Path(logs_dir)
         self.pi_dir = Path(pi_dir)
+        self.pi_log_dir = Path(pi_log_dir)
         self.config = self._load_config()
         self.max_concurrency = self._max_concurrency()
         self.scope_guard = ScopeGuard.from_config(self.config_path)
@@ -104,9 +105,8 @@ class Phase3Orchestrator:
             encoding="utf-8",
         )
         log_path.write_text(self._render_log(agent_results), encoding="utf-8")
-        pi_vuln_path, pi_report_path, pi_log_path = self._write_pi_artifacts(
+        pi_vuln_path, pi_log_path = self._write_pi_artifacts(
             vulnerability_output,
-            report_path.read_text(encoding="utf-8"),
             log_path.read_text(encoding="utf-8"),
             agent_results,
         )
@@ -118,7 +118,6 @@ class Phase3Orchestrator:
             report_path=report_path,
             log_path=log_path,
             pi_vuln_path=pi_vuln_path,
-            pi_report_path=pi_report_path,
             pi_log_path=pi_log_path,
         )
 
@@ -247,35 +246,32 @@ class Phase3Orchestrator:
     def _write_pi_artifacts(
         self,
         vulnerability_output: VulnerabilityOutput,
-        report: str,
         pipeline_log: str,
         agent_results: tuple[AgentResult, ...],
-    ) -> tuple[Path, Path, Path]:
-        outputs_dir = self.pi_dir / "outputs"
-        pi_logs_dir = self.pi_dir / "logs"
-        outputs_dir.mkdir(parents=True, exist_ok=True)
+    ) -> tuple[Path, Path]:
+        triage_dir = self.pi_dir
+        pi_logs_dir = self.pi_log_dir
+        triage_dir.mkdir(parents=True, exist_ok=True)
         pi_logs_dir.mkdir(parents=True, exist_ok=True)
 
-        pi_vuln_path = outputs_dir / "vuln.json"
-        pi_report_path = outputs_dir / "ket_qua.md"
+        pi_vuln_path = triage_dir / "vuln.json"
         pi_log_path = pi_logs_dir / "pipeline.log"
         pi_vuln_path.write_text(
             vulnerability_output.model_dump_json(indent=2),
             encoding="utf-8",
         )
-        pi_report_path.write_text(report, encoding="utf-8")
         pi_log_path.write_text(pipeline_log, encoding="utf-8")
 
         result_by_agent = {result.agent_name: result for result in agent_results}
         self._write_agent_output(
-            outputs_dir / "cve_candidates.json",
+            triage_dir / "cve_candidates.json",
             result_by_agent.get("cve_lookup_agent"),
         )
         self._write_agent_output(
-            outputs_dir / "nuclei_results.json",
+            triage_dir / "nuclei_results.json",
             result_by_agent.get("nuclei_agent"),
         )
-        return pi_vuln_path, pi_report_path, pi_log_path
+        return pi_vuln_path, pi_log_path
 
     @staticmethod
     def _write_agent_output(path: Path, result: AgentResult | None) -> None:

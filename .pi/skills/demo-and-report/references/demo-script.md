@@ -5,7 +5,7 @@
 2. Chạy command pipeline.
 3. Mở `vuln.json`.
 4. Mở `report.md`.
-5. Mở `.pi/outputs/cve_candidates.json` và `.pi/outputs/nuclei_results.json`.
+5. Mở `triage/cve_candidates.json` và `triage/nuclei_results.json`.
 6. Mở log có `agent_timing`.
 
 ## Commands

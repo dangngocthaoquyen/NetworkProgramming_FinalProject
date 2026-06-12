@@ -86,9 +86,8 @@ def print_summary(artifacts: PipelineArtifacts) -> None:
     console.print(f"vuln.json: {artifacts.vuln_path}")
     console.print(f"report.md: {artifacts.report_path}")
     console.print(f"log: {artifacts.log_path}")
-    console.print(f"Pi vuln.json: {artifacts.pi_vuln_path}")
-    console.print(f"Pi ket_qua.md: {artifacts.pi_report_path}")
-    console.print(f"Pi pipeline.log: {artifacts.pi_log_path}")
+    console.print(f"triage vuln.json: {artifacts.pi_vuln_path}")
+    console.print(f"pipeline log: {artifacts.pi_log_path}")
 
 
 def main() -> int:

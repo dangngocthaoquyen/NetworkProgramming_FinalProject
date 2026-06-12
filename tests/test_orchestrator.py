@@ -102,7 +102,8 @@ async def test_pipeline_writes_artifacts_and_continues_after_agent_error(
     orchestrator = Phase3Orchestrator(
         config_path=config,
         logs_dir=logs_dir,
-        pi_dir=tmp_path / ".pi",
+        pi_dir=tmp_path / "triage",
+        pi_log_dir=tmp_path / "logs",
         agents=[SuccessfulAgent(), FailingAgent()],
     )
     artifacts = await orchestrator.run(enum_path, output_dir)
@@ -112,10 +113,10 @@ async def test_pipeline_writes_artifacts_and_continues_after_agent_error(
     assert artifacts.report_path.exists()
     assert artifacts.log_path == logs_dir / "scan-001.log"
     assert artifacts.pi_vuln_path.exists()
-    assert artifacts.pi_report_path.exists()
     assert artifacts.pi_log_path.exists()
-    assert (tmp_path / ".pi" / "outputs" / "cve_candidates.json").exists()
-    assert (tmp_path / ".pi" / "outputs" / "nuclei_results.json").exists()
+    assert (tmp_path / "triage" / "vuln.json").exists()
+    assert (tmp_path / "triage" / "cve_candidates.json").exists()
+    assert (tmp_path / "triage" / "nuclei_results.json").exists()
     assert "mock agent failure" in artifacts.log_path.read_text(encoding="utf-8")
     assert "agent_timing" in artifacts.log_path.read_text(encoding="utf-8")
 
@@ -145,7 +146,8 @@ async def test_pipeline_blocks_out_of_scope_enum_before_agents_run(tmp_path: Pat
     orchestrator = Phase3Orchestrator(
         config_path=config,
         logs_dir=tmp_path / "logs",
-        pi_dir=tmp_path / ".pi",
+        pi_dir=tmp_path / "triage",
+        pi_log_dir=tmp_path / "logs",
         agents=[SuccessfulAgent()],
     )
 
@@ -191,7 +193,8 @@ async def test_pipeline_can_contain_service_and_os_findings(tmp_path: Path):
     orchestrator = Phase3Orchestrator(
         config_path=config,
         logs_dir=tmp_path / "logs",
-        pi_dir=tmp_path / ".pi",
+        pi_dir=tmp_path / "triage",
+        pi_log_dir=tmp_path / "logs",
         agents=[CveLookupAgent()],
     )
 
@@ -221,7 +224,8 @@ async def test_focused_samples_run_successfully(
 ):
     orchestrator = Phase3Orchestrator(
         logs_dir=tmp_path / "logs",
-        pi_dir=tmp_path / ".pi",
+        pi_dir=tmp_path / "triage",
+        pi_log_dir=tmp_path / "logs",
     )
 
     artifacts = await orchestrator.run(
@@ -244,7 +248,8 @@ async def test_focused_samples_run_successfully(
 async def test_full_sample_contains_service_and_os_assessment_data(tmp_path: Path):
     orchestrator = Phase3Orchestrator(
         logs_dir=tmp_path / "logs",
-        pi_dir=tmp_path / ".pi",
+        pi_dir=tmp_path / "triage",
+        pi_log_dir=tmp_path / "logs",
     )
 
     artifacts = await orchestrator.run(
@@ -316,7 +321,8 @@ async def test_independent_agents_run_concurrently(tmp_path: Path):
     orchestrator = Phase3Orchestrator(
         config_path=config,
         logs_dir=tmp_path / "logs",
-        pi_dir=tmp_path / ".pi",
+        pi_dir=tmp_path / "triage",
+        pi_log_dir=tmp_path / "logs",
         agents=[SlowAgent("slow_agent_a"), SlowAgent("slow_agent_b")],
     )
 

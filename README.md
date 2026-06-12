@@ -66,25 +66,26 @@ vhost, CPE, technologies, discovered paths, API endpoints, nguon enumeration,
 confidence va banner. Phase 3 chi tieu thu artifact nay; khong tu thuc hien
 reconnaissance, DNS enumeration, dirbust hoac port scanning.
 
-Chay theo format Pi/multi-agent:
+Chay theo format Pi/MVP:
 
 ```powershell
-python run_phase3.py --enum .pi/data/enum.json --out .pi/outputs
+python run_phase3.py --enum data/pi/enum.json --out reports/pi-phase3
 ```
 
 Moi lan chay pipeline tao artifact tai thu muc `--out` va dong thoi ghi ket qua
-that cua pipeline vao:
+that cua pipeline vao cac thu muc runtime o root project:
 
-- `.pi/outputs/vuln.json`: findings da merge va risk-ranked.
-- `.pi/outputs/ket_qua.md`: bao cao Markdown cuoi.
-- `.pi/outputs/cve_candidates.json`: ket qua that cua CVE Lookup Agent.
-- `.pi/outputs/nuclei_results.json`: ket qua cua Nuclei Agent. O che do demo
+- `reports/<scan>/vuln.json`: findings da merge va risk-ranked.
+- `reports/<scan>/report.md`: bao cao Markdown cuoi.
+- `triage/vuln.json`: ban sao JSON de phuc vu triage/workflow.
+- `triage/cve_candidates.json`: ket qua that cua CVE Lookup Agent.
+- `triage/nuclei_results.json`: ket qua cua Nuclei Agent. O che do demo
   an toan mac dinh, agent dung offline mock fixture/cache trong repo; real
   Nuclei chi chay khi duoc bat ro rang va van phai qua scope guard.
-- `.pi/logs/pipeline.log`: trang thai va loi cua cac agent.
+- `logs/pipeline.log`: trang thai va loi cua cac agent.
 
-Lenh sample thuong cung tao `reports/scan-001/vuln.json`,
-`reports/scan-001/report.md` va `logs/scan-001.log`, sau do in summary bang
+Lenh sample thuong cung tao `reports/<scan>/vuln.json`,
+`reports/<scan>/report.md` va `logs/<scan>.log`, sau do in summary bang
 Rich.
 
 Input mau nam tai `data/samples/enum_lab.json`. Truoc khi bo sung bat ky scanner

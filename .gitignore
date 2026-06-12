@@ -2,16 +2,16 @@ __pycache__/
 .pytest_cache/
 *.pyc
 *.pyo
-outputs/
-logs/
+logs/*
+!logs/README.md
+!logs/.gitkeep
+triage/*
+!triage/README.md
+!triage/.gitkeep
+reports/*
+!reports/README.md
+!reports/.gitkeep
 *.log
-
-reports/skills-smoke/
-reports/*-smoke/
-reports/review-scan-*/
-
-.pi/outputs/
-.pi/logs/
 
 .venv/
 venv/

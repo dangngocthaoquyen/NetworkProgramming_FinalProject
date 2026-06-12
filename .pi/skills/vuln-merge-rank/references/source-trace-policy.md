@@ -5,7 +5,7 @@ Project hiện có:
 - `source_agents`
 - `source_type`
 - `evidence`
-- Agent-specific output files trong `.pi/outputs/`
+- Agent-specific output files trong `triage/`
 
 Đây là trace hữu ích để lần theo finding xuất phát từ agent nào.
 

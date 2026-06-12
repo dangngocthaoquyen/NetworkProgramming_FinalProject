@@ -17,7 +17,7 @@ Dùng skill này khi cần demo toàn pipeline, soát checklist artifact, kiểm
 - [Presentation Notes](references/presentation-notes.md)
 
 ## Inputs
-- Sample `enum.json` hoặc `.pi/data/enum.json`.
+- Sample `enum.json` hoặc `data/pi/enum.json`.
 - Môi trường Python của project.
 - `config.yaml`.
 
@@ -30,7 +30,7 @@ Dùng skill này khi cần demo toàn pipeline, soát checklist artifact, kiểm
 1. Xác nhận sample input hợp lệ.
 2. Chạy test nếu môi trường có dependency.
 3. Chạy pipeline sample.
-4. Kiểm tra `vuln.json`, `report.md`, `.pi/outputs/*`, và log.
+4. Kiểm tra `vuln.json`, `report.md`, `triage/*`, và log.
 5. Chụp các điểm evidence cần nói khi thuyết trình.
 
 ## Checklist
